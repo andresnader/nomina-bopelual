@@ -7,6 +7,8 @@ import periodosRouter from './routes/periodos.js';
 import rolesRouter from './routes/roles.js';
 import prestamosRouter from './routes/prestamos.js';
 import facturasRouter from './routes/facturas.js';
+import reportesRouter from './routes/reportes.js';
+import usuariosRouter from './routes/usuarios.js';
 
 export function createApp() {
   const app = express();
@@ -19,6 +21,8 @@ export function createApp() {
   app.use('/api/roles', rolesRouter);
   app.use('/api/prestamos', prestamosRouter);
   app.use('/api/facturas', facturasRouter);
+  app.use('/api/reportes', reportesRouter);
+  app.use('/api', usuariosRouter); // expone /api/usuarios y /api/parametros
   return app;
 }
 

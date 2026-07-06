@@ -109,5 +109,33 @@ export async function transicionarPeriodo(client, periodoId, accion, usuarioId) 
     `UPDATE periodos SET estado=$1${extra} WHERE id=$2 RETURNING *`,
     params
   );
+
+  // Al cerrar, acumula las provisiones del período en la tabla anual por colaborador.
+  if (accion === 'cerrar') {
+    const anio = new Date(upd[0].fecha_fin).getUTCFullYear();
+    const mapa = {
+      PROVISION_DECIMO_TERCERO: 'decimo_tercero',
+      PROVISION_DECIMO_CUARTO: 'decimo_cuarto',
+      PROVISION_FONDOS_RESERVA: 'fondos_reserva'
+    };
+    const { rows: provs } = await client.query(
+      `SELECT rp.colaborador_id, l.tipo_linea, SUM(l.monto) AS total
+       FROM lineas_rol l JOIN roles_pago rp ON rp.id=l.rol_pago_id
+       WHERE rp.periodo_id=$1 AND l.es_provision=true
+       GROUP BY rp.colaborador_id, l.tipo_linea`,
+      [periodoId]
+    );
+    for (const pr of provs) {
+      const col = mapa[pr.tipo_linea];
+      if (!col) continue;
+      await client.query(
+        `INSERT INTO provisiones (colaborador_id, anio, ${col}) VALUES ($1,$2,$3)
+         ON CONFLICT (colaborador_id, anio) DO UPDATE
+           SET ${col}=provisiones.${col}+$3, actualizado_en=now()`,
+        [pr.colaborador_id, anio, pr.total]
+      );
+    }
+  }
+
   return upd[0];
 }
