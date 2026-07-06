@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.js'],
     // Los tests que tocan la BD comparten estado; correrlos en serie evita colisiones.
-    fileParallelism: false
+    fileParallelism: false,
+    globalSetup: './tests/helpers/globalSetup.js'
   }
 });

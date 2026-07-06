@@ -20,8 +20,15 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
 }
 
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
+// La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
 export async function generarRoles(client, periodoId, { sbu }) {
-  const { rows: periodoRows } = await client.query('SELECT * FROM periodos WHERE id=$1', [periodoId]);
+  // FOR UPDATE bloquea el período durante la generación (evita regeneración concurrente).
+  const { rows: periodoRows } = await client.query('SELECT * FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
+  if (periodoRows.length === 0) throw new Error('período no existe');
+  // Solo se generan roles sobre un período en BORRADOR (integridad de estado).
+  if (periodoRows[0].estado !== 'BORRADOR') {
+    throw new Error(`no se generan roles en estado ${periodoRows[0].estado}`);
+  }
   const quincena = periodoRows[0].quincena;
   const { rows: colaboradores } = await client.query(
     `SELECT c.*, ct.sueldo_base
@@ -91,7 +98,8 @@ export async function generarRoles(client, periodoId, { sbu }) {
 
 // Aplica una transición de estado del período usando la FSM.
 export async function transicionarPeriodo(client, periodoId, accion, usuarioId) {
-  const { rows } = await client.query('SELECT estado FROM periodos WHERE id=$1', [periodoId]);
+  // FOR UPDATE serializa transiciones concurrentes (evita TOCTOU entre el check y el update).
+  const { rows } = await client.query('SELECT estado FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
   if (rows.length === 0) throw new Error('período no existe');
   const nuevo = siguienteEstado(rows[0].estado, accion);
 
