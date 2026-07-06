@@ -1,0 +1,12 @@
+{
+  "name": "nomina-bopelual",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "concurrently -n server,client \"npm -w server run dev\" \"npm -w client run dev\"",
+    "test": "npm -w server test && npm -w client test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

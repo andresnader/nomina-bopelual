@@ -113,9 +113,9 @@ Un registro por colaborador por período.
 | id | uuid PK | |
 | periodo_id | uuid FK → periodos | |
 | colaborador_id | uuid FK → colaboradores | |
-| total_ingresos | numeric(12,2) | Calculado desde lineas_rol |
-| total_descuentos | numeric(12,2) | Calculado desde lineas_rol |
-| neto | numeric(12,2) | total_ingresos - total_descuentos |
+| total_ingresos | numeric(12,2) | Calculado desde lineas_rol; se actualiza en cada cambio mientras el período esté en BORRADOR |
+| total_descuentos | numeric(12,2) | Ídem |
+| neto | numeric(12,2) | total_ingresos - total_descuentos; congelado al cerrar el período |
 | estado_pago | enum(`PENDIENTE`, `PAGADO`) | |
 | pagado_en | timestamptz NULLABLE | |
 
