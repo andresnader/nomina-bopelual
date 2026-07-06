@@ -5,6 +5,8 @@ import authRouter from './routes/auth.js';
 import colaboradoresRouter from './routes/colaboradores.js';
 import periodosRouter from './routes/periodos.js';
 import rolesRouter from './routes/roles.js';
+import prestamosRouter from './routes/prestamos.js';
+import facturasRouter from './routes/facturas.js';
 
 export function createApp() {
   const app = express();
@@ -15,6 +17,8 @@ export function createApp() {
   app.use('/api/colaboradores', colaboradoresRouter);
   app.use('/api/periodos', periodosRouter);
   app.use('/api/roles', rolesRouter);
+  app.use('/api/prestamos', prestamosRouter);
+  app.use('/api/facturas', facturasRouter);
   return app;
 }
 
