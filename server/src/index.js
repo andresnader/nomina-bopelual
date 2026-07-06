@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { PORT } from './config.js';
 import authRouter from './routes/auth.js';
+import colaboradoresRouter from './routes/colaboradores.js';
 
 export function createApp() {
   const app = express();
@@ -9,6 +10,7 @@ export function createApp() {
   app.use(express.json());
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api/auth', authRouter);
+  app.use('/api/colaboradores', colaboradoresRouter);
   return app;
 }
 
