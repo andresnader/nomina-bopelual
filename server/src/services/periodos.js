@@ -1,5 +1,6 @@
 import { siguienteEstado } from '../lib/periodo-fsm.js';
 import * as calc from '../lib/calculo.js';
+import { round2 } from '../lib/round.js';
 import { recalcularTotales } from './roles.js';
 
 export async function crearPeriodo(client, p) {
@@ -21,7 +22,7 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
 
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
 // La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
-export async function generarRoles(client, periodoId, { sbu }) {
+export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }) {
   // FOR UPDATE bloquea el período durante la generación (evita regeneración concurrente).
   const { rows: periodoRows } = await client.query('SELECT * FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
   if (periodoRows.length === 0) throw new Error('período no existe');
@@ -48,27 +49,31 @@ export async function generarRoles(client, periodoId, { sbu }) {
 
     if (quincena === 1) {
       await insertarLinea(client, rolId, {
-        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo),
+        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo, pctAnticipo),
         desc: 'Anticipo primera quincena'
       });
     } else {
-      await insertarLinea(client, rolId, { tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: sueldo });
-      // Descuento del anticipo ya pagado en la primera quincena.
+      const pctSegunda = round2(1 - pctAnticipo);
       await insertarLinea(client, rolId, {
-        tipo: 'ANTICIPO_QUINCENA', clase: 'DESCUENTO', monto: calc.anticipoQuincena(sueldo),
-        desc: 'Anticipo ya pagado'
+        tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda),
+        desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`
       });
       if (col.tipo === 'IESS') {
         await insertarLinea(client, rolId, {
           tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo)
         });
         await insertarLinea(client, rolId, {
-          tipo: 'PROVISION_DECIMO_TERCERO', clase: 'INGRESO',
-          monto: calc.decimoTercero(sueldo), es_provision: true
+          tipo: 'DECIMO_TERCERO', clase: 'INGRESO',
+          monto: calc.decimoTercero(sueldo)
         });
         await insertarLinea(client, rolId, {
-          tipo: 'PROVISION_DECIMO_CUARTO', clase: 'INGRESO',
-          monto: calc.decimoCuarto(sbu), es_provision: true
+          tipo: 'DECIMO_CUARTO', clase: 'INGRESO',
+          monto: calc.decimoCuarto(sbu)
+        });
+        await insertarLinea(client, rolId, {
+          tipo: 'FONDOS_RESERVA', clase: 'INGRESO',
+          monto: calc.fondosReserva(sueldo, 999),
+          desc: 'Fondos de reserva'
         });
       }
     }
@@ -110,18 +115,21 @@ export async function transicionarPeriodo(client, periodoId, accion, usuarioId) 
     params
   );
 
-  // Al cerrar, acumula las provisiones del período en la tabla anual por colaborador.
+  // Al cerrar, acumula las provisiones/pagos del período en la tabla anual por colaborador.
   if (accion === 'cerrar') {
     const anio = new Date(upd[0].fecha_fin).getUTCFullYear();
     const mapa = {
+      DECIMO_TERCERO: 'decimo_tercero',
+      DECIMO_CUARTO: 'decimo_cuarto',
+      FONDOS_RESERVA: 'fondos_reserva',
       PROVISION_DECIMO_TERCERO: 'decimo_tercero',
       PROVISION_DECIMO_CUARTO: 'decimo_cuarto',
-      PROVISION_FONDOS_RESERVA: 'fondos_reserva'
+      PROVISION_FONDOS_RESERVA: 'fondos_reserva',
     };
     const { rows: provs } = await client.query(
       `SELECT rp.colaborador_id, l.tipo_linea, SUM(l.monto) AS total
        FROM lineas_rol l JOIN roles_pago rp ON rp.id=l.rol_pago_id
-       WHERE rp.periodo_id=$1 AND l.es_provision=true
+       WHERE rp.periodo_id=$1 AND l.tipo_linea IN ('DECIMO_TERCERO','DECIMO_CUARTO','FONDOS_RESERVA','PROVISION_DECIMO_TERCERO','PROVISION_DECIMO_CUARTO','PROVISION_FONDOS_RESERVA')
        GROUP BY rp.colaborador_id, l.tipo_linea`,
       [periodoId]
     );

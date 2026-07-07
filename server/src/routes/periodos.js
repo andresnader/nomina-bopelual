@@ -6,9 +6,9 @@ import { crearPeriodo, generarRoles, transicionarPeriodo } from '../services/per
 const router = Router();
 router.use(requireAuth);
 
-async function getSbu(client) {
-  const { rows } = await client.query(`SELECT valor FROM parametros WHERE clave='SBU'`);
-  return Number(rows[0]?.valor ?? 460);
+async function getParam(client, clave, fallback) {
+  const { rows } = await client.query('SELECT valor FROM parametros WHERE clave=$1', [clave]);
+  return rows[0]?.valor ?? fallback;
 }
 
 router.get('/', requireRole(['ADMIN', 'RRHH', 'GERENCIA']), async (_req, res) => {
@@ -31,7 +31,9 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     const periodo = await crearPeriodo(client, {
       nombre, fecha_inicio, fecha_fin, quincena, creado_por: req.usuario.id
     });
-    const { creados } = await generarRoles(client, periodo.id, { sbu: await getSbu(client) });
+    const sbu = Number(await getParam(client, 'SBU', '460'));
+    const pctAnticipo = Number(await getParam(client, 'PORCENTAJE_ANTICIPO', '0.40'));
+    const { creados } = await generarRoles(client, periodo.id, { sbu, pctAnticipo });
     await client.query('COMMIT');
     res.status(201).json({ periodo, creados });
   } catch (e) {

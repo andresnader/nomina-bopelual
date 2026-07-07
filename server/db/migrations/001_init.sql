@@ -112,3 +112,4 @@ CREATE TABLE parametros (
 );
 
 INSERT INTO parametros (clave, valor) VALUES ('SBU','460.00') ON CONFLICT DO NOTHING;
+INSERT INTO parametros (clave, valor) VALUES ('PORCENTAJE_ANTICIPO','0.40') ON CONFLICT DO NOTHING;

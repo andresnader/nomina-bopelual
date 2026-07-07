@@ -33,9 +33,10 @@ describe('servicio de períodos', () => {
          WHERE rp.periodo_id=$1 AND rp.colaborador_id=$2`,
         [p.id, colaboradorId]
       );
-      // ingresos cash=1000; descuentos = IESS 94.5 + anticipo 500 = 594.5; neto = 405.5
-      expect(Number(rows[0].total_descuentos)).toBe(594.5);
-      expect(Number(rows[0].neto)).toBe(405.5);
+      // ingresos cash: 60% sueldo(600) + décimo3(83.33) + décimo4(38.33) + fondosReserva(83.3) = 804.96
+      // descuentos: IESS 94.5; neto = 804.96 - 94.5 = 710.46
+      expect(Number(rows[0].total_descuentos)).toBe(94.5);
+      expect(Number(rows[0].neto)).toBe(710.46);
     });
   });
 

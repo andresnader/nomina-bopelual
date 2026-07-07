@@ -27,8 +27,8 @@ export function cuotaPrestamo(cuota, saldoPendiente) {
   return { aplicada: round2(aplicada), saldoNuevo, activo: saldoNuevo > 0 };
 }
 
-// --- Anticipo de primera quincena (≈ 50% del sueldo base) ---
-export const anticipoQuincena = (sueldoBase) => round2(sueldoBase * 0.5);
+// --- Anticipo de primera quincena (porcentaje configurable vía parámetros) ---
+export const anticipoQuincena = (sueldoBase, porcentaje = 0.4) => round2(sueldoBase * porcentaje);
 
 // --- Totales del rol de pago ---
 // El neto en efectivo EXCLUYE las provisiones (son ingresos contables, no cash).

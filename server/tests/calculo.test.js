@@ -33,7 +33,8 @@ describe('cuota de préstamo', () => {
 });
 
 describe('anticipo quincena', () => {
-  it('50% del sueldo base', () => expect(calc.anticipoQuincena(1000)).toBe(500));
+  it('40% por defecto', () => expect(calc.anticipoQuincena(1000)).toBe(400));
+  it('porcentaje configurable', () => expect(calc.anticipoQuincena(1000, 0.5)).toBe(500));
 });
 
 describe('calcularTotales', () => {
