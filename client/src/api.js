@@ -1,14 +1,11 @@
 const BASE = '/api';
 
 async function req(method, path, body) {
-  const token = localStorage.getItem('idToken');
   const res = await fetch(BASE + path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     const detalle = await res.json().catch(() => ({}));
@@ -23,5 +20,5 @@ export const api = {
   post: (p, b) => req('POST', p, b),
   patch: (p, b) => req('PATCH', p, b),
   put: (p, b) => req('PUT', p, b),
-  del: (p) => req('DELETE', p)
+  del: (p) => req('DELETE', p),
 };

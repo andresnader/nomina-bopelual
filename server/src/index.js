@@ -2,7 +2,8 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import cors from 'cors';
-import { PORT } from './config.js';
+import cookieSession from 'cookie-session';
+import { PORT, SESSION_SECRET } from './config.js';
 import authRouter from './routes/auth.js';
 import colaboradoresRouter from './routes/colaboradores.js';
 import periodosRouter from './routes/periodos.js';
@@ -16,8 +17,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  app.use(cors({ origin: true, credentials: true }));
   app.use(express.json());
+  app.use(cookieSession({
+    name: 'session',
+    keys: [SESSION_SECRET],
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+  }));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api/auth', authRouter);
   app.use('/api/colaboradores', colaboradoresRouter);
