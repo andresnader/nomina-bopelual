@@ -2,6 +2,7 @@ export default function Login() {
   return (
     <div className="min-h-screen grid place-items-center bg-[#0f172a]">
       <div className="text-center">
+        <img src="/logo-ivory.png" alt="BOPELUAL" className="h-16 mx-auto mb-4" />
         <h1 className="font-display font-extrabold text-3xl text-brand-yellow mb-2">Nómina BOPELUAL</h1>
         <p className="text-slate-400 mb-6 text-sm">Ingresa con tu cuenta corporativa</p>
         <a
