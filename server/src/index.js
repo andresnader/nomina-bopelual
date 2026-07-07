@@ -1,4 +1,6 @@
 import express from 'express';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import cors from 'cors';
 import { PORT } from './config.js';
 import authRouter from './routes/auth.js';
@@ -9,6 +11,8 @@ import prestamosRouter from './routes/prestamos.js';
 import facturasRouter from './routes/facturas.js';
 import reportesRouter from './routes/reportes.js';
 import usuariosRouter from './routes/usuarios.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
@@ -22,7 +26,9 @@ export function createApp() {
   app.use('/api/prestamos', prestamosRouter);
   app.use('/api/facturas', facturasRouter);
   app.use('/api/reportes', reportesRouter);
-  app.use('/api', usuariosRouter); // expone /api/usuarios y /api/parametros
+  app.use('/api', usuariosRouter);
+  app.use(express.static(join(__dirname, '../../client/dist')));
+  app.get('*', (_req, res) => res.sendFile(join(__dirname, '../../client/dist/index.html')));
   return app;
 }
 
