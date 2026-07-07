@@ -8,8 +8,8 @@ describe('Badge', () => {
     const el = screen.getByText('CERRADO');
     expect(el.className).toMatch(/green/);
   });
-  it('BORRADOR usa amarillo', () => {
+  it('BORRADOR usa gold', () => {
     render(<Badge estado="BORRADOR" />);
-    expect(screen.getByText('BORRADOR').className).toMatch(/yellow|amber/);
+    expect(screen.getByText('BORRADOR').className).toMatch(/gold/);
   });
 });

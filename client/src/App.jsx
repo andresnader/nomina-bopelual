@@ -15,7 +15,14 @@ import Configuracion from './pages/Configuracion.jsx';
 
 export default function App() {
   const { usuario, cargando } = useAuth();
-  if (cargando) return <div className="min-h-screen grid place-items-center text-slate-400">Cargando…</div>;
+  if (cargando) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-brand-950">
+      <div className="w-12 h-12 rounded-xl bg-brand-800 border border-brand-600/30 flex items-center justify-center mb-4">
+        <img src="/logo-ivory.png" alt="" className="w-7 h-7" />
+      </div>
+      <div className="w-6 h-6 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" />
+    </div>
+  );
   if (!usuario) return <Login />;
   return (
     <Layout>

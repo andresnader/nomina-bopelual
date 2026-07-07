@@ -1,7 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-brand-darker text-slate-100 font-sans;
+@layer base {
+  body {
+    @apply bg-brand-950 text-slate-100 font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-brand-500/30 hover:bg-brand-400/40 transition-colors;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-brand-800 border border-brand-600/50 rounded-xl p-5;
+  }
+
+  .card-hover {
+    @apply card hover:border-gold-400/20 hover:shadow-glow-sm transition-all duration-200;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-gold {
+    @apply badge bg-gold-400/15 text-gold-400;
+  }
+
+  .badge-green {
+    @apply badge bg-emerald-400/15 text-emerald-400;
+  }
+
+  .badge-blue {
+    @apply badge bg-blue-400/15 text-blue-400;
+  }
+
+  .badge-red {
+    @apply badge bg-red-400/15 text-red-400;
+  }
+
+  .badge-slate {
+    @apply badge bg-slate-400/15 text-slate-300;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-brand-950 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply btn bg-gold-400 text-brand-950 hover:bg-gold-500 focus:ring-gold-400 font-semibold;
+  }
+
+  .btn-secondary {
+    @apply btn bg-brand-700 text-slate-200 hover:bg-brand-600 border border-brand-500/30 focus:ring-brand-500;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-300 hover:text-slate-100 hover:bg-brand-700/50 focus:ring-brand-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 focus:ring-red-500;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-brand-500/40 bg-brand-900 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gold-400/30 focus:border-gold-400/50 transition-all duration-150;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-slate-300 mb-1.5;
+  }
+
+  .table-header {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-400;
+  }
+
+  .link {
+    @apply text-gold-400 hover:text-gold-300 underline underline-offset-2 decoration-gold-400/30 hover:decoration-gold-400/60 transition-all;
+  }
 }
