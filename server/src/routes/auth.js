@@ -4,14 +4,17 @@ import { requireAuth } from '../auth/middleware.js';
 import { OAuth2Client } from 'google-auth-library';
 import pool from '../db/pool.js';
 
+const REDIRECT_URI = `${APP_BASE_URL}/api/auth/google/callback`;
+const client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI);
+
 const router = Router();
-const client = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, `${APP_BASE_URL}/api/auth/google/callback`);
 
 router.get('/google', (req, res) => {
   const authUrl = client.generateAuthUrl({
     access_type: 'online',
     scope: ['email', 'profile'],
     prompt: 'select_account',
+    redirect_uri: REDIRECT_URI,
   });
   res.redirect(authUrl);
 });
@@ -21,7 +24,7 @@ router.get('/google/callback', async (req, res) => {
     const { code } = req.query;
     if (!code) return res.status(400).send('Falta código de autorización');
 
-    const { tokens } = await client.getToken(code);
+    const { tokens } = await client.getToken({ code, redirect_uri: REDIRECT_URI });
     const ticket = await client.verifyIdToken({ idToken: tokens.id_token, audience: GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
     const email = payload?.email;
