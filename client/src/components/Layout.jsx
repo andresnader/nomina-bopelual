@@ -19,7 +19,9 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen md:flex">
       <aside className="hidden md:flex md:flex-col w-60 bg-brand-dark border-r border-white/5 p-4">
-        <div className="font-display font-extrabold text-brand-yellow text-xl mb-8">BOPELUAL</div>
+        <div className="mb-8 flex justify-center">
+          <img src="/logo-ivory.png" alt="BOPELUAL" className="h-10" />
+        </div>
         <nav className="flex-1 space-y-1">
           {items.map(({ to, icon: Icon, label }) => (
             <NavLink
