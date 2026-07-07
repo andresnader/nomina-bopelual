@@ -4,8 +4,8 @@
   "workspaces": ["server", "client"],
   "scripts": {
     "dev": "concurrently -n server,client \"npm -w server run dev\" \"npm -w client run dev\"",
-    "build": "npm -w client build",
-    "start": "npm -w server start",
+    "build": "cd client && node ../node_modules/vite/bin/vite.js build",
+    "start": "cd server && node src/index.js",
     "test": "npm -w server test && npm -w client test"
   },
   "devDependencies": {
