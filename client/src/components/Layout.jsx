@@ -17,16 +17,16 @@ export default function Layout({ children }) {
   const items = NAV.filter((n) => usuario && n.roles.includes(usuario.rol));
 
   return (
-    <div className="min-h-screen md:flex bg-slate-100">
-      {/* Sidebar desktop */}
-      <aside className="hidden md:flex md:flex-col w-64 bg-brand-900 border-r border-brand-700">
-        <div className="px-5 pt-7 pb-6 border-b border-brand-700/60">
+    <div className="min-h-screen bg-slate-100">
+      {/* Sidebar desktop — fijo, no se mueve */}
+      <aside className="hidden md:flex md:flex-col fixed inset-y-0 left-0 w-64 bg-brand-900 border-r border-brand-700 z-30">
+        <div className="px-5 pt-7 pb-6 border-b border-brand-700/60 shrink-0">
           <img src="/logo-ivory.png" alt="BOPELUAL S.A." className="w-full" />
           <p className="text-center text-[11px] font-semibold tracking-[0.25em] text-gold-400 mt-2">
             NÓMINA
           </p>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {items.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -49,7 +49,7 @@ export default function Layout({ children }) {
             </NavLink>
           ))}
         </nav>
-        <div className="px-4 py-4 border-t border-brand-700/60">
+        <div className="px-4 py-4 border-t border-brand-700/60 shrink-0">
           <p className="text-[11px] text-slate-500 mb-1">Conectado como</p>
           <p className="text-sm font-semibold text-white truncate">{usuario?.nombre || usuario?.email}</p>
           <p className="text-xs text-slate-400 truncate">{usuario?.email}</p>
@@ -65,8 +65,8 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 min-h-screen overflow-auto">
+      {/* Main content — margen izquierdo para el sidebar fijo */}
+      <main className="min-h-screen md:ml-64">
         <div className="max-w-7xl mx-auto p-4 md:p-8 pb-24 md:pb-8">
           {children}
         </div>
