@@ -42,6 +42,30 @@ describe('reportes', () => {
     expect(res.text).toContain('CSV Col');
   });
 
+  it('neutraliza fórmulas CSV en nombres maliciosos', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS',
+        nombre: '=SUM(1+1)',
+        cedula: `F${Date.now()}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000,
+      fecha_inicio: '2026-01-01'
+    });
+    const per = (
+      await auth(request(app).post('/api/periodos')).send({
+        nombre: '2da fx', fecha_inicio: '2026-07-16', fecha_fin: '2026-07-31', quincena: 2
+      })
+    ).body;
+    const res = await auth(request(app).get(`/api/reportes/periodo/${per.periodo.id}.csv`));
+    // El nombre debe salir prefijado con apóstrofo, nunca como fórmula ejecutable.
+    expect(res.text).toContain("'=SUM(1+1)");
+    expect(res.text).not.toMatch(/(^|,)=SUM/);
+  });
+
   it('permite editar el SBU (parámetro) como ADMIN', async () => {
     const app = createApp();
     const res = await auth(request(app).put('/api/parametros/SBU')).send({ valor: '470.00' });

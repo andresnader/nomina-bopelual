@@ -6,18 +6,20 @@ import { iessPatronal } from '../lib/calculo.js';
 const router = Router();
 router.use(requireAuth, requireRole(['ADMIN', 'RRHH', 'GERENCIA']));
 
+// Neutraliza inyección de fórmulas: una celda que empiece con = + - @ (o tab/CR)
+// es interpretada como fórmula por Excel/Sheets. Se antepone un apóstrofo.
+function sanitizarCsv(valor) {
+  const s = String(valor);
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
 function aCsv(filas, columnas) {
+  const escapar = (v) => {
+    const s = sanitizarCsv(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
   const head = columnas.join(',');
-  const cuerpo = filas
-    .map((f) =>
-      columnas
-        .map((c) => {
-          const v = f[c] ?? '';
-          return /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v;
-        })
-        .join(',')
-    )
-    .join('\n');
+  const cuerpo = filas.map((f) => columnas.map((c) => escapar(f[c])).join(',')).join('\n');
   return `${head}\n${cuerpo}\n`;
 }
 
