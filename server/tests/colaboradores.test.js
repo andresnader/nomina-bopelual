@@ -24,7 +24,8 @@ describe('colaboradores', () => {
     expect(crear.status).toBe(201);
     const lista = await auth(request(app).get('/api/colaboradores'));
     expect(lista.status).toBe(200);
-    expect(lista.body.some((c) => c.id === crear.body.id)).toBe(true);
+    expect(lista.body.data.some((c) => c.id === crear.body.id)).toBe(true);
+    expect(lista.body.total).toBeGreaterThanOrEqual(1);
   });
 
   it('un nuevo contrato cierra el anterior', async () => {

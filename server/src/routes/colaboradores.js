@@ -5,10 +5,13 @@ import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.
 const router = Router();
 router.use(requireAuth);
 
+const SORT_VALIDO = ['nombre', 'tipo', 'departamento', 'empresa', 'fecha_ingreso', 'cedula', 'cargo', 'email'];
+
 router.get('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { tipo, activo } = req.query;
+  const { tipo, activo, q, sort, order, page, per_page } = req.query;
   const cond = [];
   const params = [];
+
   if (tipo) {
     params.push(tipo);
     cond.push(`tipo=$${params.length}`);
@@ -17,9 +20,37 @@ router.get('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     params.push(activo === 'true');
     cond.push(`activo=$${params.length}`);
   }
+  if (q) {
+    const like = `%${q}%`;
+    params.push(like, like, like, like);
+    const idx = params.length - 3;
+    cond.push(`(nombre ILIKE $${idx} OR cedula ILIKE $${idx + 1} OR departamento ILIKE $${idx + 2} OR email ILIKE $${idx + 3})`);
+  }
+
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-  const { rows } = await pool.query(`SELECT * FROM colaboradores ${where} ORDER BY nombre`, params);
-  res.json(rows);
+  const colSort = SORT_VALIDO.includes(sort) ? sort : 'nombre';
+  const dir = order === 'desc' ? 'DESC' : 'ASC';
+
+  const { rows: [{ count }] } = await pool.query(
+    `SELECT count(*)::int AS count FROM colaboradores ${where}`, params
+  );
+
+  if (per_page === 'all') {
+    const { rows } = await pool.query(
+      `SELECT * FROM colaboradores ${where} ORDER BY ${colSort} ${dir}`, params
+    );
+    return res.json({ data: rows, total: count, page: 1, per_page: count });
+  }
+
+  const limite = Math.min(Math.max(parseInt(per_page) || 25, 1), 100);
+  const pag = Math.max(parseInt(page) || 1, 1);
+  const offset = (pag - 1) * limite;
+
+  const { rows } = await pool.query(
+    `SELECT * FROM colaboradores ${where} ORDER BY ${colSort} ${dir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limite, offset]
+  );
+  res.json({ data: rows, total: count, page: pag, per_page: limite });
 });
 
 router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {

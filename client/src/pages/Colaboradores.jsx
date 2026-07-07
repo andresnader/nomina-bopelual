@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowUpDown, ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
@@ -7,18 +8,69 @@ import PageTitle from '../components/PageTitle.jsx';
 import { fecha } from '../utils.js';
 
 const VACIO = { tipo: 'IESS', nombre: '', cedula: '', email: '', departamento: '', cargo: '', fecha_ingreso: '' };
+const POR_PAGINA = [10, 25, 50, { label: 'Todos', value: 'all' }];
+const COLUMNAS = [
+  { key: 'nombre', label: 'Nombre' },
+  { key: 'tipo', label: 'Tipo' },
+  { key: 'empresa', label: 'Unidad de Negocios' },
+  { key: 'departamento', label: 'Departamento' },
+  { key: 'fecha_ingreso', label: 'Ingreso' },
+];
 
 export default function Colaboradores() {
-  const [lista, setLista] = useState([]);
-  const [filtro, setFiltro] = useState('');
+  const [data, setData] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(25);
+  const [sort, setSort] = useState('nombre');
+  const [order, setOrder] = useState('asc');
+  const [q, setQ] = useState('');
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const searchRef = useRef(null);
 
-  const cargar = () =>
-    api.get('/colaboradores').then(setLista).catch((e) => setError(e.message));
-  useEffect(() => {
-    cargar();
-  }, []);
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try {
+      const params = new URLSearchParams({ sort, order, page: pagina, per_page: porPagina });
+      if (q) params.set('q', q);
+      const res = await api.get('/colaboradores?' + params.toString());
+      setData(res.data);
+      setTotal(res.total);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCargando(false);
+    }
+  }, [pagina, porPagina, sort, order, q]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const totalPaginas = porPagina === 'all' ? 1 : Math.max(1, Math.ceil(total / porPagina));
+
+  const cambiarSort = (key) => {
+    if (sort === key) {
+      setOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(key);
+      setOrder('asc');
+    }
+    setPagina(1);
+  };
+
+  const cambiarPorPagina = (e) => {
+    const val = e.target.value;
+    setPorPagina(val === 'all' ? 'all' : Number(val));
+    setPagina(1);
+  };
+
+  const SorterIcon = ({ colKey }) => {
+    if (sort !== colKey) return <ArrowUpDown size={14} className="ml-1 shrink-0 text-slate-400" />;
+    return order === 'asc'
+      ? <ArrowUp size={14} className="ml-1 shrink-0 text-gold-500" />
+      : <ArrowDown size={14} className="ml-1 shrink-0 text-gold-500" />;
+  };
 
   const guardar = async (e) => {
     e.preventDefault();
@@ -31,7 +83,8 @@ export default function Colaboradores() {
     }
   };
 
-  const visibles = lista.filter((c) => c.nombre.toLowerCase().includes(filtro.toLowerCase()));
+  const desde = porPagina === 'all' ? 1 : (pagina - 1) * porPagina + 1;
+  const hasta = porPagina === 'all' ? total : Math.min(pagina * porPagina, total);
 
   return (
     <div>
@@ -49,13 +102,6 @@ export default function Colaboradores() {
       </PageTitle>
 
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
-
-      <input
-        placeholder="Buscar por nombre…"
-        value={filtro}
-        onChange={(e) => setFiltro(e.target.value)}
-        className="input w-full mb-4"
-      />
 
       {form && (
         <Card className="mb-4">
@@ -95,32 +141,123 @@ export default function Colaboradores() {
         </Card>
       )}
 
+      {/* Buscador + paginación superior */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            ref={searchRef}
+            placeholder="Buscar por nombre, cédula, departamento…"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPagina(1); }}
+            className="input w-full pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-3 text-sm text-slate-500">
+          <span className="hidden sm:inline">{total} colaboradores</span>
+          <select
+            value={porPagina}
+            onChange={cambiarPorPagina}
+            className="input py-1.5 text-sm"
+          >
+            {POR_PAGINA.map((o) => {
+              const val = typeof o === 'object' ? o.value : o;
+              const label = typeof o === 'object' ? o.label : `${o} por página`;
+              return <option key={val} value={val}>{label}</option>;
+            })}
+          </select>
+        </div>
+      </div>
+
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
-              <th className="p-3">Nombre</th>
-              <th className="p-3">Tipo</th>
-              <th className="p-3">Departamento</th>
-              <th className="p-3">Ingreso</th>
+              {COLUMNAS.map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => cambiarSort(col.key)}
+                  className="p-3 cursor-pointer select-none hover:text-slate-700 transition-colors whitespace-nowrap"
+                >
+                  <span className="inline-flex items-center">
+                    {col.label}
+                    <SorterIcon colKey={col.key} />
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {visibles.map((c) => (
-              <tr key={c.id} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className="p-3">
-                  <Link to={`/colaboradores/${c.id}`} className="text-gold-600 font-medium hover:underline">
-                    {c.nombre}
-                  </Link>
+            {cargando ? (
+              <tr>
+                <td colSpan={COLUMNAS.length} className="p-8 text-center text-slate-400">
+                  <div className="inline-block w-5 h-5 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" />
                 </td>
-                <td className="p-3"><Badge estado={c.tipo} /></td>
-                <td className="p-3">{c.departamento || '—'}</td>
-                <td className="p-3">{fecha(c.fecha_ingreso)}</td>
               </tr>
-            ))}
+            ) : data.length === 0 ? (
+              <tr>
+                <td colSpan={COLUMNAS.length} className="p-8 text-center text-slate-400">
+                  {q ? 'Sin resultados para esta búsqueda' : 'No hay colaboradores'}
+                </td>
+              </tr>
+            ) : (
+              data.map((c) => (
+                <tr key={c.id} className="border-b border-slate-200 hover:bg-slate-50">
+                  <td className="p-3">
+                    <Link to={`/colaboradores/${c.id}`} className="text-gold-600 font-medium hover:underline">
+                      {c.nombre}
+                    </Link>
+                  </td>
+                  <td className="p-3"><Badge estado={c.tipo} /></td>
+                  <td className="p-3">{c.empresa || '—'}</td>
+                  <td className="p-3">{c.departamento || '—'}</td>
+                  <td className="p-3 whitespace-nowrap">{fecha(c.fecha_ingreso)}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </Card>
+
+      {/* Paginación inferior */}
+      {porPagina !== 'all' && totalPaginas > 1 && (
+        <div className="flex items-center justify-between mt-4 text-sm text-slate-500">
+          <span>{desde}–{hasta} de {total}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              disabled={pagina <= 1}
+              className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
+              .map((p, idx, arr) => (
+                <span key={p} className="flex items-center">
+                  {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1">…</span>}
+                  <button
+                    onClick={() => setPagina(p)}
+                    className={`min-w-[32px] h-8 rounded text-sm font-medium transition-colors ${
+                      p === pagina
+                        ? 'bg-gold-400 text-brand-900'
+                        : 'hover:bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                </span>
+              ))}
+            <button
+              onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+              disabled={pagina >= totalPaginas}
+              className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
