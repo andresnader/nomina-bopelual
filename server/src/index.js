@@ -17,6 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json());
   app.use(cookieSession({
@@ -27,6 +28,12 @@ export function createApp() {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
   }));
+  app.use((req, _res, next) => {
+    if (req.path.startsWith('/api/auth')) {
+      console.log('Auth req:', req.method, req.path, 'cookie:', req.headers.cookie?.slice(0, 80), 'session:', !!req.session?.usuario);
+    }
+    next();
+  });
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.use('/api/auth', authRouter);
   app.use('/api/colaboradores', colaboradoresRouter);
