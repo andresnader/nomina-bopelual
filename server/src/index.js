@@ -46,5 +46,16 @@ if (process.argv[1] && process.argv[1].endsWith('index.js')) {
   const { default: pool } = await import('./db/pool.js');
   const { runMigrations } = await import('./db/migrate.js');
   await runMigrations(pool);
+
+  // Seed: crea los admins desde ADMIN_EMAILS si no existen
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+  for (const email of adminEmails) {
+    await pool.query(
+      `INSERT INTO usuarios (email, nombre, rol) VALUES ($1, split_part($1, '@', 1), 'ADMIN')
+       ON CONFLICT (email) DO UPDATE SET activo=true, rol='ADMIN'`,
+      [email]
+    );
+  }
+
   createApp().listen(PORT, () => console.log(`API en :${PORT}`));
 }
