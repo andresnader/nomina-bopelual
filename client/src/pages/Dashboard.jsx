@@ -19,7 +19,7 @@ export default function Dashboard() {
     Promise.all([api.get('/periodos'), api.get('/colaboradores?activo=true')])
       .then(([p, c]) => {
         setPeriodos(p);
-        setColaboradores(c);
+        setColaboradores(c.data || c);
       })
       .catch((e) => setError(e.message));
   }, [esGestor]);

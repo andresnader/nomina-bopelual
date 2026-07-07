@@ -16,7 +16,7 @@ export default function Prestamos() {
   const cargar = () => api.get('/prestamos').then(setLista).catch((e) => setError(e.message));
   useEffect(() => {
     cargar();
-    api.get('/colaboradores?activo=true').then(setColaboradores).catch(() => {});
+    api.get('/colaboradores?activo=true').then((r) => setColaboradores(r.data || r)).catch(() => {});
   }, []);
 
   const crear = async (e) => {

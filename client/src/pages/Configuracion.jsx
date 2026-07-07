@@ -18,7 +18,7 @@ export default function Configuracion() {
   const cargar = () => {
     api.get('/usuarios').then(setUsuarios).catch((e) => setError(e.message));
     api.get('/parametros').then((p) => setSbu(p.find((x) => x.clave === 'SBU')?.valor || '')).catch(() => {});
-    api.get('/colaboradores?activo=true').then(setColaboradores).catch(() => {});
+    api.get('/colaboradores?activo=true').then((r) => setColaboradores(r.data || r)).catch(() => {});
   };
   useEffect(() => {
     cargar();

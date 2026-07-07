@@ -16,7 +16,7 @@ export default function Proveedores() {
   const cargar = () => api.get('/facturas').then(setFacturas).catch((e) => setError(e.message));
   useEffect(() => {
     cargar();
-    api.get('/colaboradores?tipo=EXTERNO').then(setProveedores).catch(() => {});
+    api.get('/colaboradores?tipo=EXTERNO').then((r) => setProveedores(r.data || r)).catch(() => {});
   }, []);
 
   const crear = async (e) => {
