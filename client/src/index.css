@@ -4,9 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tema BOPELUAL: sidebar/login azul marino oscuro con acento dorado,
+   área de contenido clara con tarjetas blancas (ver tema.png / login.png). */
 @layer base {
   body {
-    @apply bg-brand-950 text-slate-100 font-sans antialiased;
+    @apply bg-slate-100 text-slate-800 font-sans antialiased;
   }
 
   ::-webkit-scrollbar {
@@ -16,17 +18,17 @@
     @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-brand-500/30 hover:bg-brand-400/40 transition-colors;
+    @apply rounded-full bg-slate-300 hover:bg-slate-400 transition-colors;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-brand-800 border border-brand-600/50 rounded-xl p-5;
+    @apply bg-white border border-slate-200 rounded-xl p-5 shadow-sm;
   }
 
   .card-hover {
-    @apply card hover:border-gold-400/20 hover:shadow-glow-sm transition-all duration-200;
+    @apply card hover:border-gold-400/60 hover:shadow-md transition-all duration-200;
   }
 
   .badge {
@@ -34,58 +36,62 @@
   }
 
   .badge-gold {
-    @apply badge bg-gold-400/15 text-gold-400;
+    @apply badge bg-gold-100 text-gold-800;
   }
 
   .badge-green {
-    @apply badge bg-emerald-400/15 text-emerald-400;
+    @apply badge bg-emerald-100 text-emerald-700;
   }
 
   .badge-blue {
-    @apply badge bg-blue-400/15 text-blue-400;
+    @apply badge bg-blue-100 text-blue-700;
   }
 
   .badge-red {
-    @apply badge bg-red-400/15 text-red-400;
+    @apply badge bg-red-100 text-red-700;
   }
 
   .badge-slate {
-    @apply badge bg-slate-400/15 text-slate-300;
+    @apply badge bg-slate-100 text-slate-600;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-brand-950 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-primary {
-    @apply btn bg-gold-400 text-brand-950 hover:bg-gold-500 focus:ring-gold-400 font-semibold;
+    @apply btn bg-gold-400 text-brand-900 hover:bg-gold-500 focus:ring-gold-400 font-semibold;
   }
 
   .btn-secondary {
-    @apply btn bg-brand-700 text-slate-200 hover:bg-brand-600 border border-brand-500/30 focus:ring-brand-500;
+    @apply btn bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 focus:ring-slate-300;
   }
 
   .btn-ghost {
-    @apply btn text-slate-300 hover:text-slate-100 hover:bg-brand-700/50 focus:ring-brand-500;
+    @apply btn text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:ring-slate-300;
   }
 
   .btn-danger {
-    @apply btn bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20 focus:ring-red-500;
+    @apply btn bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 focus:ring-red-400;
   }
 
   .input {
-    @apply w-full rounded-lg border border-brand-500/40 bg-brand-900 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gold-400/30 focus:border-gold-400/50 transition-all duration-150;
+    @apply rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-gold-400/40 focus:border-gold-500 transition-all duration-150;
   }
 
   .label {
-    @apply block text-sm font-medium text-slate-300 mb-1.5;
+    @apply block text-sm font-medium text-slate-600 mb-1.5;
   }
 
   .table-header {
-    @apply text-xs font-semibold uppercase tracking-wider text-slate-400;
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-500;
   }
 
   .link {
-    @apply text-gold-400 hover:text-gold-300 underline underline-offset-2 decoration-gold-400/30 hover:decoration-gold-400/60 transition-all;
+    @apply text-gold-600 hover:text-gold-700 underline underline-offset-2 decoration-gold-400/40 hover:decoration-gold-600 transition-all;
+  }
+
+  .text-muted {
+    @apply text-slate-500;
   }
 }

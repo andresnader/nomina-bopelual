@@ -38,13 +38,13 @@ export default function Prestamos() {
   return (
     <div>
       <PageTitle>Préstamos</PageTitle>
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <Card className="mb-4">
         <form onSubmit={crear} className="grid md:grid-cols-4 gap-2">
           <select required value={form.colaborador_id}
             onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+            className="input w-full">
             <option value="">Colaborador…</option>
             {colaboradores.map((c) => (
               <option key={c.id} value={c.id}>{c.nombre}</option>
@@ -52,14 +52,14 @@ export default function Prestamos() {
           </select>
           <input required type="number" step="0.01" placeholder="Monto total" value={form.monto_total}
             onChange={(e) => setForm({ ...form, monto_total: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <input required type="number" step="0.01" placeholder="Cuota por quincena" value={form.cuota_quincena}
             onChange={(e) => setForm({ ...form, cuota_quincena: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <input required type="date" value={form.fecha_inicio}
             onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
-          <button className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
+            className="input w-full" />
+          <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
             Registrar préstamo
           </button>
         </form>
@@ -67,8 +67,8 @@ export default function Prestamos() {
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-slate-400 text-left">
-            <tr className="border-b border-white/5">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
               <th className="p-3">Colaborador</th>
               <th className="p-3 text-right">Total</th>
               <th className="p-3 text-right">Cuota</th>
@@ -79,7 +79,7 @@ export default function Prestamos() {
           </thead>
           <tbody>
             {lista.map((p) => (
-              <tr key={p.id} className="border-b border-white/5">
+              <tr key={p.id} className="border-b border-slate-200">
                 <td className="p-3">{p.colaborador_nombre}</td>
                 <td className="p-3 text-right">{money(p.monto_total)}</td>
                 <td className="p-3 text-right">{money(p.cuota_quincena)}</td>

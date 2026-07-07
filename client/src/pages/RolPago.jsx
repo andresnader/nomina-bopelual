@@ -60,22 +60,22 @@ export default function RolPago() {
         Comprobante — {rol.colaborador_nombre}
       </PageTitle>
 
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
-      <Card className="mb-4 text-sm text-slate-300">
+      <Card className="mb-4 text-sm text-slate-600">
         <div>Período: {rol.periodo_nombre} <Badge estado={rol.periodo_estado} /></div>
         <div>Cédula/RUC: {rol.cedula || '—'} · Cargo: {rol.cargo || '—'}</div>
       </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
-          <h3 className="font-display font-bold mb-2 text-green-300">Ingresos</h3>
+          <h3 className="font-display font-bold mb-2 text-emerald-600">Ingresos</h3>
           {ingresos.map((l) => (
             <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
           ))}
         </Card>
         <Card>
-          <h3 className="font-display font-bold mb-2 text-red-300">Descuentos</h3>
+          <h3 className="font-display font-bold mb-2 text-red-600">Descuentos</h3>
           {descuentos.map((l) => (
             <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
           ))}
@@ -84,7 +84,7 @@ export default function RolPago() {
 
       {provisiones.length > 0 && (
         <Card className="mt-4">
-          <h3 className="font-display font-bold mb-2 text-slate-400">Provisiones (no afectan el neto)</h3>
+          <h3 className="font-display font-bold mb-2 text-slate-500">Provisiones (no afectan el neto)</h3>
           {provisiones.map((l) => (
             <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
           ))}
@@ -93,7 +93,7 @@ export default function RolPago() {
 
       <Card className="mt-4 flex justify-between text-lg font-display font-bold">
         <span>Neto a pagar</span>
-        <span className="text-brand-yellow">{money(rol.neto)}</span>
+        <span className="text-gold-600 font-medium">{money(rol.neto)}</span>
       </Card>
 
       {editable && (
@@ -103,16 +103,16 @@ export default function RolPago() {
             <form onSubmit={agregar} className="grid md:grid-cols-4 gap-2">
               <input required placeholder="Tipo (ej: BONO_DESEMPENO)" value={nueva.tipo_linea}
                 onChange={(e) => setNueva({ ...nueva, tipo_linea: e.target.value })}
-                className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+                className="input w-full" />
               <select value={nueva.clase} onChange={(e) => setNueva({ ...nueva, clase: e.target.value })}
-                className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+                className="input w-full">
                 <option value="INGRESO">Ingreso</option>
                 <option value="DESCUENTO">Descuento</option>
               </select>
               <input required type="number" step="0.01" placeholder="Monto" value={nueva.monto}
                 onChange={(e) => setNueva({ ...nueva, monto: e.target.value })}
-                className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
-              <button className="bg-brand-yellow text-brand-darker font-semibold rounded-lg text-sm">
+                className="input w-full" />
+              <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold rounded-lg text-sm">
                 Agregar
               </button>
             </form>
@@ -125,7 +125,7 @@ export default function RolPago() {
 
 function Linea({ l, editable, onDel }) {
   return (
-    <div className="flex justify-between items-center py-1 text-sm border-b border-white/5 last:border-0">
+    <div className="flex justify-between items-center py-1 text-sm border-b border-slate-200 last:border-0">
       <span>
         {l.tipo_linea}
         {l.descripcion ? <span className="text-slate-500"> · {l.descripcion}</span> : null}

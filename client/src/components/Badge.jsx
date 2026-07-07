@@ -5,8 +5,8 @@ const ESTILOS = {
   PENDIENTE: 'badge-slate',
   PAGADO: 'badge-green',
   PAGADA: 'badge-green',
-  IESS: 'bg-gold-400/15 text-gold-400',
-  EXTERNO: 'bg-purple-400/15 text-purple-400'
+  IESS: 'badge bg-gold-100 text-gold-800',
+  EXTERNO: 'badge bg-purple-100 text-purple-700'
 };
 
 export default function Badge({ estado }) {

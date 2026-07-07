@@ -50,16 +50,16 @@ export default function Configuracion() {
   return (
     <div>
       <PageTitle>Configuración</PageTitle>
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
-      {msg && <Card className="mb-4 text-green-300">{msg}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
+      {msg && <Card className="mb-4 text-emerald-600">{msg}</Card>}
 
       <Card className="mb-4">
         <h2 className="font-display font-bold mb-3">Salario Básico Unificado (SBU)</h2>
         <form onSubmit={guardarSbu} className="flex gap-2 items-center">
-          <span className="text-slate-400 text-sm">Actual: {money(sbu)}</span>
+          <span className="text-slate-500 text-sm">Actual: {money(sbu)}</span>
           <input value={sbu} onChange={(e) => setSbu(e.target.value)}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm w-32" />
-          <button className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm">
+            className="input w-32" />
+          <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm">
             Guardar
           </button>
         </form>
@@ -70,25 +70,25 @@ export default function Configuracion() {
         <form onSubmit={guardarUsuario} className="grid md:grid-cols-4 gap-2">
           <input required type="email" placeholder="correo@bopelual.com" value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <input placeholder="Nombre" value={form.nombre}
             onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+            className="input w-full">
             {['ADMIN', 'RRHH', 'COLABORADOR', 'GERENCIA'].map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
           <select value={form.colaborador_id}
             onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+            className="input w-full">
             <option value="">Sin vincular</option>
             {colaboradores.map((c) => (
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          <button className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
+          <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
             Guardar usuario
           </button>
         </form>
@@ -96,8 +96,8 @@ export default function Configuracion() {
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-slate-400 text-left">
-            <tr className="border-b border-white/5">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
               <th className="p-3">Correo</th>
               <th className="p-3">Rol</th>
               <th className="p-3">Activo</th>
@@ -105,7 +105,7 @@ export default function Configuracion() {
           </thead>
           <tbody>
             {usuarios.map((u) => (
-              <tr key={u.id} className="border-b border-white/5">
+              <tr key={u.id} className="border-b border-slate-200">
                 <td className="p-3">{u.email}</td>
                 <td className="p-3">{u.rol}</td>
                 <td className="p-3">

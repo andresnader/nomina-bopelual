@@ -30,10 +30,10 @@ export default function Dashboard() {
         <PageTitle>Bienvenido</PageTitle>
         <Card>
           <div className="flex flex-col items-center py-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-brand-700 flex items-center justify-center mb-4">
+            <div className="w-16 h-16 rounded-full bg-brand-900 flex items-center justify-center mb-4">
               <span className="text-2xl font-display font-bold text-gold-400">{usuario.email?.charAt(0).toUpperCase()}</span>
             </div>
-            <p className="text-slate-300 mb-1">Hola, {usuario.email}</p>
+            <p className="text-slate-600 mb-1">Hola, {usuario.email}</p>
             <p className="text-sm text-slate-500">Tus roles de pago estarán disponibles aquí.</p>
           </div>
         </Card>
@@ -47,7 +47,7 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
       <PageTitle>Dashboard</PageTitle>
-      {error && <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm">{error}</div>}
+      {error && <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard titulo="Último período" valor={ultimo ? money(ultimo.total_neto) : '—'} sub={ultimo?.nombre} />
         <KpiCard titulo="Colaboradores activos" valor={colaboradores.length} />

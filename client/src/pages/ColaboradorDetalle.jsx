@@ -35,12 +35,12 @@ export default function ColaboradorDetalle() {
       <PageTitle>
         {col.nombre} <Badge estado={col.tipo} />
       </PageTitle>
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card>
           <h2 className="font-display font-bold mb-3">Datos</h2>
-          <dl className="text-sm space-y-1 text-slate-300">
+          <dl className="text-sm space-y-1 text-slate-600">
             <div>Cédula/RUC: {col.cedula || '—'}</div>
             <div>Departamento: {col.departamento || '—'}</div>
             <div>Cargo: {col.cargo || '—'}</div>
@@ -54,14 +54,14 @@ export default function ColaboradorDetalle() {
             <input required type="number" step="0.01" placeholder="Sueldo base"
               value={contrato.sueldo_base}
               onChange={(e) => setContrato({ ...contrato, sueldo_base: e.target.value })}
-              className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+              className="input w-full" />
             <input required type="date" value={contrato.fecha_inicio}
               onChange={(e) => setContrato({ ...contrato, fecha_inicio: e.target.value })}
-              className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+              className="input w-full" />
             <input placeholder="Notas (motivo)" value={contrato.notas}
               onChange={(e) => setContrato({ ...contrato, notas: e.target.value })}
-              className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
-            <button className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm">
+              className="input w-full" />
+            <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm">
               Registrar
             </button>
           </form>
@@ -71,8 +71,8 @@ export default function ColaboradorDetalle() {
       <Card className="mt-4">
         <h2 className="font-display font-bold mb-3">Historial de contratos</h2>
         <table className="w-full text-sm">
-          <thead className="text-slate-400 text-left">
-            <tr className="border-b border-white/5">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
               <th className="p-2">Sueldo</th>
               <th className="p-2">Desde</th>
               <th className="p-2">Hasta</th>
@@ -81,7 +81,7 @@ export default function ColaboradorDetalle() {
           </thead>
           <tbody>
             {col.contratos.map((c) => (
-              <tr key={c.id} className="border-b border-white/5">
+              <tr key={c.id} className="border-b border-slate-200">
                 <td className="p-2">{money(c.sueldo_base)}</td>
                 <td className="p-2">{fecha(c.fecha_inicio)}</td>
                 <td className="p-2">{c.fecha_fin ? fecha(c.fecha_fin) : <Badge estado="APROBADO" />}</td>
@@ -97,7 +97,7 @@ export default function ColaboradorDetalle() {
         <ul className="text-sm space-y-1">
           {col.roles_pago.map((r) => (
             <li key={r.id}>
-              <Link to={`/roles/${r.id}`} className="text-brand-yellow hover:underline">
+              <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">
                 {money(r.neto)} — {r.estado_pago}
               </Link>
             </li>

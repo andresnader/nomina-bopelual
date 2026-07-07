@@ -6,3 +6,10 @@ dist/
 
 # Recurso externo, no parte de la nómina
 Agentic-Design-Patterns/
+
+# Datos reales de nómina (cédulas, cuentas bancarias, sueldos): NUNCA al repo
+informacindelprocesodenminacarrosyayautoclub/
+
+# Imágenes de referencia de diseño
+login.png
+tema.png

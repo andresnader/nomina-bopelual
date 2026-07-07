@@ -2,6 +2,8 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { crearPeriodo, generarRoles, transicionarPeriodo } from '../services/periodos.js';
+import { generarTxtPichincha } from '../lib/txt-pichincha.js';
+import { round2 } from '../lib/round.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -75,5 +77,58 @@ function accionHandler(accion) {
 }
 router.post('/:id/aprobar', requireRole(['RRHH']), accionHandler('aprobar'));
 router.post('/:id/cerrar', requireRole(['RRHH']), accionHandler('cerrar'));
+
+// Archivo de pago masivo Cash Management (Banco Pichincha) del período.
+// Filtros: ?empresa=BOPELUAL S.A.&grupo=ADM|COMERCIAL|SERV_PROF
+// Los grupos replican los TXT del proceso manual: SERV_PROF = externos,
+// COMERCIAL = IESS en ventas/comercial, ADM = el resto de IESS.
+const FILTRO_GRUPO = {
+  SERV_PROF: `c.tipo='EXTERNO'`,
+  COMERCIAL: `c.tipo='IESS' AND c.departamento IN ('VENTAS','COMERCIAL')`,
+  ADM: `c.tipo='IESS' AND (c.departamento IS NULL OR c.departamento NOT IN ('VENTAS','COMERCIAL'))`,
+};
+
+router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { empresa, grupo } = req.query;
+  if (grupo && !FILTRO_GRUPO[grupo]) return res.status(400).json({ error: 'grupo inválido' });
+  const { rows: p } = await pool.query('SELECT * FROM periodos WHERE id=$1', [req.params.id]);
+  if (p.length === 0) return res.status(404).json({ error: 'no encontrado' });
+
+  const params = [req.params.id];
+  if (empresa) params.push(empresa);
+  const { rows } = await pool.query(
+    `SELECT rp.neto, c.nombre, c.cedula, c.cuenta_bancaria, c.tipo_cuenta, c.codigo_banco,
+            c.forma_pago
+     FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
+     WHERE rp.periodo_id=$1 AND rp.neto > 0
+       ${empresa ? 'AND c.empresa=$2' : ''}
+       ${grupo ? `AND ${FILTRO_GRUPO[grupo]}` : ''}
+     ORDER BY c.nombre`,
+    params
+  );
+
+  // Solo entran transferencias con datos bancarios completos; el resto se
+  // reporta para que RRHH los pague por otro medio o complete la ficha.
+  const pagables = rows.filter(
+    (r) => r.forma_pago === 'TRANSFERENCIA' && r.cuenta_bancaria && r.cedula && r.codigo_banco
+  );
+  const excluidos = rows
+    .filter((r) => !pagables.includes(r))
+    .map((r) => ({ nombre: r.nombre, neto: r.neto, motivo: !r.cuenta_bancaria || !r.cedula || !r.codigo_banco ? 'sin datos bancarios' : 'forma de pago no es transferencia' }));
+
+  const descripcion = `ROL DE PAGOS ${p[0].nombre}`.toUpperCase().slice(0, 40);
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const archivo = ['pago', slug(p[0].nombre), empresa && slug(empresa), grupo?.toLowerCase()]
+    .filter(Boolean).join('_') + '.txt';
+
+  res.json({
+    archivo,
+    descripcion,
+    contenido: pagables.length ? generarTxtPichincha(pagables, descripcion) : '',
+    incluidos: pagables.length,
+    total: round2(pagables.reduce((s, r) => s + Number(r.neto), 0)),
+    excluidos,
+  });
+});
 
 export default router;

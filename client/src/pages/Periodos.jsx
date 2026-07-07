@@ -51,11 +51,11 @@ export default function Periodos() {
         </PageTitle>
 
       {msg && <div className="mb-4 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm animate-slide-up">{msg}</div>}
-      {error && <div className="mb-4 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-slide-up">{error}</div>}
+      {error && <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm animate-slide-up">{error}</div>}
 
       {form && (
         <Card className="mb-6 animate-slide-up">
-          <h2 className="text-sm font-semibold text-slate-200 mb-4">Nuevo período de pago</h2>
+          <h2 className="text-sm font-semibold text-slate-800 mb-4">Nuevo período de pago</h2>
           <form onSubmit={crear} className="grid md:grid-cols-2 gap-4">
             <input required placeholder="Nombre (ej: 2da quincena julio 2026)" value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
@@ -101,15 +101,15 @@ export default function Periodos() {
           </thead>
           <tbody>
             {lista.map((p) => (
-              <tr key={p.id} className="border-b border-brand-600/20 hover:bg-brand-700/40 transition-colors">
+              <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
                 <td className="p-4">
                   <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">
                     {p.nombre}
                   </Link>
                 </td>
-                <td className="p-4 text-slate-300">{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</td>
+                <td className="p-4 text-slate-600">{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</td>
                 <td className="p-4"><Badge estado={p.estado} /></td>
-                <td className="p-4 text-right font-medium text-slate-200">{money(p.total_neto)}</td>
+                <td className="p-4 text-right font-medium text-slate-800">{money(p.total_neto)}</td>
               </tr>
             ))}
             {lista.length === 0 && (

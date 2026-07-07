@@ -17,17 +17,14 @@ export default function Layout({ children }) {
   const items = NAV.filter((n) => usuario && n.roles.includes(usuario.rol));
 
   return (
-    <div className="min-h-screen md:flex bg-brand-950">
+    <div className="min-h-screen md:flex bg-slate-100">
       {/* Sidebar desktop */}
-      <aside className="hidden md:flex md:flex-col w-64 bg-brand-800 border-r border-brand-600/30">
-        <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-brand-600/20">
-          <div className="w-9 h-9 rounded-lg bg-brand-700 flex items-center justify-center">
-            <img src="/logo-ivory.png" alt="" className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="font-display font-bold text-sm text-slate-100">BOPELUAL</h1>
-            <p className="text-[10px] text-slate-400">Nómina</p>
-          </div>
+      <aside className="hidden md:flex md:flex-col w-64 bg-brand-900 border-r border-brand-700">
+        <div className="px-5 pt-7 pb-6 border-b border-brand-700/60">
+          <img src="/logo-ivory.png" alt="BOPELUAL S.A." className="w-full" />
+          <p className="text-center text-[11px] font-semibold tracking-[0.25em] text-gold-400 mt-2">
+            NÓMINA
+          </p>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           {items.map(({ to, icon: Icon, label }) => (
@@ -36,31 +33,35 @@ export default function Layout({ children }) {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
                   isActive
-                    ? 'bg-gold-400/10 text-gold-400 shadow-glow-sm'
-                    : 'text-slate-300 hover:text-slate-100 hover:bg-brand-700/60'
+                    ? 'bg-gold-400 text-brand-900 font-semibold shadow-glow-sm'
+                    : 'text-slate-300 font-medium hover:text-white hover:bg-brand-700/60'
                 }`
               }
             >
-              <Icon size={18} className={isActive ? 'text-gold-400' : 'text-slate-400'} />
-              {label}
+              {({ isActive }) => (
+                <>
+                  <Icon size={18} className={isActive ? 'text-brand-900' : 'text-slate-400'} />
+                  {label}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
-        <div className="px-4 py-4 border-t border-brand-600/20">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-xs font-medium text-slate-300">
-              {usuario?.email?.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-slate-200 truncate">{usuario?.email}</p>
-              <p className="text-[10px] text-slate-400">{usuario?.rol}</p>
-            </div>
-            <button onClick={logout} className="text-slate-500 hover:text-slate-300 transition-colors" title="Cerrar sesión">
-              <LogOut size={16} />
-            </button>
-          </div>
+        <div className="px-4 py-4 border-t border-brand-700/60">
+          <p className="text-[11px] text-slate-500 mb-1">Conectado como</p>
+          <p className="text-sm font-semibold text-white truncate">{usuario?.nombre || usuario?.email}</p>
+          <p className="text-xs text-slate-400 truncate">{usuario?.email}</p>
+          <span className="inline-block mt-2 rounded bg-gold-400 px-2 py-0.5 text-[10px] font-bold tracking-wide text-brand-900">
+            {usuario?.rol}
+          </span>
+          <button
+            onClick={logout}
+            className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-brand-600 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-brand-700/60 transition-colors"
+          >
+            <LogOut size={15} /> Salir
+          </button>
         </div>
       </aside>
 
@@ -72,7 +73,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-brand-800 border-t border-brand-600/30 flex justify-around py-2 px-2 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-brand-900 border-t border-brand-700 flex justify-around py-2 px-2 safe-area-bottom">
         {items.slice(0, 5).map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -84,7 +85,7 @@ export default function Layout({ children }) {
               }`
             }
           >
-            <Icon size={20} className={isActive ? 'text-gold-400' : 'text-slate-400'} />
+            <Icon size={20} />
             {label}
           </NavLink>
         ))}

@@ -34,20 +34,20 @@ export default function Reportes() {
   return (
     <div>
       <PageTitle>Reportes</PageTitle>
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <Card className="mb-4">
         <h2 className="font-display font-bold mb-3">Exportar período (CSV)</h2>
         <div className="flex gap-2 flex-wrap">
           <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+            className="input w-full">
             <option value="">Elige un período…</option>
             {periodos.map((p) => (
               <option key={p.id} value={p.id}>{p.nombre}</option>
             ))}
           </select>
           <button onClick={descargarCsv} disabled={!seleccion}
-            className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-40">
+            className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-40">
             Descargar CSV
           </button>
         </div>
@@ -56,8 +56,8 @@ export default function Reportes() {
       <Card>
         <h2 className="font-display font-bold mb-3">Costo por departamento (IESS)</h2>
         <table className="w-full text-sm">
-          <thead className="text-slate-400 text-left">
-            <tr className="border-b border-white/5">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
               <th className="p-2">Departamento</th>
               <th className="p-2 text-right">Sueldos</th>
               <th className="p-2 text-right">Aporte patronal (12.15%)</th>
@@ -65,7 +65,7 @@ export default function Reportes() {
           </thead>
           <tbody>
             {costo.map((c) => (
-              <tr key={c.departamento} className="border-b border-white/5">
+              <tr key={c.departamento} className="border-b border-slate-200">
                 <td className="p-2">{c.departamento}</td>
                 <td className="p-2 text-right">{money(c.total_sueldos)}</td>
                 <td className="p-2 text-right">{money(c.aporte_patronal)}</td>

@@ -39,13 +39,13 @@ export default function Proveedores() {
   return (
     <div>
       <PageTitle>Proveedores / Facturas</PageTitle>
-      {error && <Card className="mb-4 text-red-300">{error}</Card>}
+      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <Card className="mb-4">
         <form onSubmit={crear} className="grid md:grid-cols-4 gap-2">
           <select required value={form.colaborador_id}
             onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm">
+            className="input w-full">
             <option value="">Proveedor…</option>
             {proveedores.map((p) => (
               <option key={p.id} value={p.id}>{p.nombre}</option>
@@ -53,14 +53,14 @@ export default function Proveedores() {
           </select>
           <input placeholder="N° factura" value={form.numero_factura}
             onChange={(e) => setForm({ ...form, numero_factura: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <input required type="date" value={form.fecha_factura}
             onChange={(e) => setForm({ ...form, fecha_factura: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
+            className="input w-full" />
           <input required type="number" step="0.01" placeholder="Monto bruto" value={form.monto_bruto}
             onChange={(e) => setForm({ ...form, monto_bruto: e.target.value })}
-            className="bg-brand-darker border border-white/10 rounded px-3 py-2 text-sm" />
-          <button className="bg-brand-yellow text-brand-darker font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
+            className="input w-full" />
+          <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm md:col-span-4">
             Registrar factura (retención 10% automática)
           </button>
         </form>
@@ -68,8 +68,8 @@ export default function Proveedores() {
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-slate-400 text-left">
-            <tr className="border-b border-white/5">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
               <th className="p-3">Proveedor</th>
               <th className="p-3">Factura</th>
               <th className="p-3 text-right">Bruto</th>
@@ -81,7 +81,7 @@ export default function Proveedores() {
           </thead>
           <tbody>
             {facturas.map((f) => (
-              <tr key={f.id} className="border-b border-white/5">
+              <tr key={f.id} className="border-b border-slate-200">
                 <td className="p-3">{f.colaborador_nombre}</td>
                 <td className="p-3">{f.numero_factura || '—'} · {fecha(f.fecha_factura)}</td>
                 <td className="p-3 text-right">{money(f.monto_bruto)}</td>
@@ -90,7 +90,7 @@ export default function Proveedores() {
                 <td className="p-3"><Badge estado={f.estado} /></td>
                 <td className="p-3">
                   {f.estado === 'PENDIENTE' && (
-                    <button onClick={() => marcarPagada(f.id)} className="text-green-300 text-xs">
+                    <button onClick={() => marcarPagada(f.id)} className="text-emerald-600 text-xs">
                       Marcar pagada
                     </button>
                   )}
