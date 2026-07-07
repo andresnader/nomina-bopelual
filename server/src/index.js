@@ -12,6 +12,10 @@ import prestamosRouter from './routes/prestamos.js';
 import facturasRouter from './routes/facturas.js';
 import reportesRouter from './routes/reportes.js';
 import usuariosRouter from './routes/usuarios.js';
+import descuentosRouter from './routes/descuentos.js';
+import ausenciasRouter from './routes/ausencias.js';
+import documentosRouter from './routes/documentos.js';
+import evaluacionesRouter from './routes/evaluaciones.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +46,10 @@ export function createApp() {
   app.use('/api/prestamos', prestamosRouter);
   app.use('/api/facturas', facturasRouter);
   app.use('/api/reportes', reportesRouter);
+  app.use('/api/descuentos', descuentosRouter);
+  app.use('/api/ausencias', ausenciasRouter);
+  app.use('/api/colaboradores/:colaboradorId/documentos', documentosRouter);
+  app.use('/api/colaboradores/:colaboradorId/evaluaciones', evaluacionesRouter);
   app.use('/api', usuariosRouter);
   app.use(express.static(join(__dirname, '../../client/dist')));
   app.get('*', (_req, res) => res.sendFile(join(__dirname, '../../client/dist/index.html')));

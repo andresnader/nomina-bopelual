@@ -1,20 +1,28 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, FileText, Landmark, BarChart3, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, FileText, Landmark, BarChart3, Settings, LogOut, MinusCircle, CalendarOff } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 const NAV = [
+  { seccion: 'NÓMINA' },
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'RRHH', 'COLABORADOR', 'GERENCIA'] },
-  { to: '/colaboradores', icon: Users, label: 'Colaboradores', roles: ['ADMIN', 'RRHH'] },
   { to: '/periodos', icon: CalendarDays, label: 'Períodos', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
-  { to: '/proveedores', icon: FileText, label: 'Proveedores', roles: ['ADMIN', 'RRHH'] },
+  { to: '/descuentos', icon: MinusCircle, label: 'Descuentos', roles: ['ADMIN', 'RRHH'] },
   { to: '/prestamos', icon: Landmark, label: 'Préstamos', roles: ['ADMIN', 'RRHH'] },
+  { to: '/proveedores', icon: FileText, label: 'Proveedores', roles: ['ADMIN', 'RRHH'] },
   { to: '/reportes', icon: BarChart3, label: 'Reportes', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
+  { seccion: 'TALENTO HUMANO' },
+  { to: '/colaboradores', icon: Users, label: 'Colaboradores', roles: ['ADMIN', 'RRHH'] },
+  { to: '/ausencias', icon: CalendarOff, label: 'Ausencias', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
+  { seccion: '' },
   { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['ADMIN'] }
 ];
 
 export default function Layout({ children }) {
   const { usuario, logout } = useAuth();
-  const items = NAV.filter((n) => usuario && n.roles.includes(usuario.rol));
+  // Ítems permitidos por rol; una cabecera de sección solo se muestra si le sigue un ítem visible
+  const permitidos = NAV.filter((n) => n.seccion !== undefined || (usuario && n.roles.includes(usuario.rol)));
+  const visibles = permitidos.filter((n, i) => n.seccion === undefined || permitidos[i + 1]?.seccion === undefined && permitidos[i + 1]);
+  const items = visibles.filter((n) => n.seccion === undefined);
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -27,27 +35,38 @@ export default function Layout({ children }) {
           </p>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {items.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
-                  isActive
-                    ? 'bg-gold-400 text-brand-900 font-semibold shadow-glow-sm'
-                    : 'text-slate-300 font-medium hover:text-white hover:bg-brand-700/60'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={18} className={isActive ? 'text-brand-900' : 'text-slate-400'} />
-                  {label}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {visibles.map((n, i) =>
+            n.seccion !== undefined ? (
+              n.seccion && (
+                <p key={`s${i}`} className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-[0.15em] text-slate-500">
+                  {n.seccion}
+                </p>
+              )
+            ) : (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
+                    isActive
+                      ? 'bg-gold-400 text-brand-900 font-semibold shadow-glow-sm'
+                      : 'text-slate-300 font-medium hover:text-white hover:bg-brand-700/60'
+                  }`
+                }
+              >
+                {({ isActive }) => {
+                  const Icon = n.icon;
+                  return (
+                    <>
+                      <Icon size={18} className={isActive ? 'text-brand-900' : 'text-slate-400'} />
+                      {n.label}
+                    </>
+                  );
+                }}
+              </NavLink>
+            )
+          )}
         </nav>
         <div className="px-4 py-4 border-t border-brand-700/60 shrink-0">
           <p className="text-[11px] text-slate-500 mb-1">Conectado como</p>

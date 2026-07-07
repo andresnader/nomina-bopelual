@@ -95,6 +95,27 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
       }
     }
 
+    // Descuentos recurrentes → se aplican según la quincena configurada
+    // (aplicar_en: 0=ambas, 1=solo primera, 2=solo segunda). Con cuotas
+    // definidas se decrementan y el descuento se desactiva al llegar a 0.
+    const { rows: descuentos } = await client.query(
+      `SELECT * FROM descuentos_recurrentes
+       WHERE colaborador_id=$1 AND activo=true AND aplicar_en IN (0,$2)`,
+      [col.id, quincena]
+    );
+    for (const d of descuentos) {
+      await insertarLinea(client, rolId, {
+        tipo: d.tipo_linea, clase: 'DESCUENTO', monto: Number(d.monto), desc: d.notas
+      });
+      if (d.cuotas_restantes != null) {
+        const restantes = d.cuotas_restantes - 1;
+        await client.query(
+          'UPDATE descuentos_recurrentes SET cuotas_restantes=$1, activo=$2 WHERE id=$3',
+          [restantes, restantes > 0, d.id]
+        );
+      }
+    }
+
     await recalcularTotales(client, rolId);
     creados++;
   }

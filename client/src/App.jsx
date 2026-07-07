@@ -12,6 +12,8 @@ import Proveedores from './pages/Proveedores.jsx';
 import Prestamos from './pages/Prestamos.jsx';
 import Reportes from './pages/Reportes.jsx';
 import Configuracion from './pages/Configuracion.jsx';
+import Descuentos from './pages/Descuentos.jsx';
+import Ausencias from './pages/Ausencias.jsx';
 
 export default function App() {
   const { usuario, cargando } = useAuth();
@@ -35,6 +37,8 @@ export default function App() {
         <Route path="/roles/:id" element={<RolPago />} />
         <Route path="/proveedores" element={<Proveedores />} />
         <Route path="/prestamos" element={<Prestamos />} />
+        <Route path="/descuentos" element={<Descuentos />} />
+        <Route path="/ausencias" element={<Ausencias />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/configuracion" element={<Configuracion />} />
         <Route path="*" element={<Navigate to="/" />} />

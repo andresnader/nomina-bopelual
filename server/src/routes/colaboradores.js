@@ -72,7 +72,12 @@ router.get(
     if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
     const [contratos, rolesPago, prestamos] = await Promise.all([
       pool.query('SELECT * FROM contratos WHERE colaborador_id=$1 ORDER BY fecha_inicio DESC', [req.params.id]),
-      pool.query('SELECT * FROM roles_pago WHERE colaborador_id=$1', [req.params.id]),
+      pool.query(
+        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha
+         FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
+         WHERE rp.colaborador_id=$1 ORDER BY p.fecha_inicio DESC`,
+        [req.params.id]
+      ),
       pool.query('SELECT * FROM prestamos WHERE colaborador_id=$1', [req.params.id])
     ]);
     res.json({
@@ -85,7 +90,11 @@ router.get(
 );
 
 router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const campos = ['nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula'];
+  const campos = [
+    'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
+    'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
+    'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria'
+  ];
   const set = [];
   const params = [];
   for (const c of campos) {
