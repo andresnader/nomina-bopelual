@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "importar:descuentos": "node scripts/importar-descuentos.js"
   },
   "dependencies": {
     "cookie-session": "^2.1.1",
