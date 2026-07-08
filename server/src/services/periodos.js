@@ -82,8 +82,8 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
 
     // Préstamos activos → cuota de amortización.
     const { rows: prestamos } = await client.query(
-      'SELECT * FROM prestamos WHERE colaborador_id=$1 AND activo=true',
-      [col.id]
+      'SELECT * FROM prestamos WHERE colaborador_id=$1 AND activo=true AND fecha_inicio <= $2',
+      [col.id, periodoRows[0].fecha_fin]
     );
     for (const pr of prestamos) {
       const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
