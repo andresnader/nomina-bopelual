@@ -1,6 +1,10 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
+import { ToastProvider } from './components/Toast.jsx';
+import { ConfirmProvider } from './components/Modal.jsx';
+import { instalarMensajesValidacionEspanol } from './lib/validacion-html5.js';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Colaboradores from './pages/Colaboradores.jsx';
@@ -17,32 +21,41 @@ import Ausencias from './pages/Ausencias.jsx';
 
 export default function App() {
   const { usuario, cargando } = useAuth();
-  if (cargando) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-brand-950">
-      <div className="w-12 h-12 rounded-xl bg-brand-800 border border-brand-600/30 flex items-center justify-center mb-4">
-        <img src="/logo-ivory.png" alt="" className="w-7 h-7" />
-      </div>
-      <div className="w-6 h-6 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" />
-    </div>
-  );
-  if (!usuario) return <Login />;
+
+  useEffect(() => instalarMensajesValidacionEspanol(), []);
+
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/colaboradores" element={<Colaboradores />} />
-        <Route path="/colaboradores/:id" element={<ColaboradorDetalle />} />
-        <Route path="/periodos" element={<Periodos />} />
-        <Route path="/periodos/:id" element={<PeriodoDetalle />} />
-        <Route path="/roles/:id" element={<RolPago />} />
-        <Route path="/proveedores" element={<Proveedores />} />
-        <Route path="/prestamos" element={<Prestamos />} />
-        <Route path="/descuentos" element={<Descuentos />} />
-        <Route path="/ausencias" element={<Ausencias />} />
-        <Route path="/reportes" element={<Reportes />} />
-        <Route path="/configuracion" element={<Configuracion />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Layout>
+    <ToastProvider>
+      <ConfirmProvider>
+        {cargando ? (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-brand-950">
+            <div className="w-12 h-12 rounded-xl bg-brand-800 border border-brand-600/30 flex items-center justify-center mb-4">
+              <img src="/logo-ivory.png" alt="" className="w-7 h-7" />
+            </div>
+            <div className="w-6 h-6 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" />
+          </div>
+        ) : !usuario ? (
+          <Login />
+        ) : (
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/colaboradores" element={<Colaboradores />} />
+              <Route path="/colaboradores/:id" element={<ColaboradorDetalle />} />
+              <Route path="/periodos" element={<Periodos />} />
+              <Route path="/periodos/:id" element={<PeriodoDetalle />} />
+              <Route path="/roles/:id" element={<RolPago />} />
+              <Route path="/proveedores" element={<Proveedores />} />
+              <Route path="/prestamos" element={<Prestamos />} />
+              <Route path="/descuentos" element={<Descuentos />} />
+              <Route path="/ausencias" element={<Ausencias />} />
+              <Route path="/reportes" element={<Reportes />} />
+              <Route path="/configuracion" element={<Configuracion />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Layout>
+        )}
+      </ConfirmProvider>
+    </ToastProvider>
   );
 }
