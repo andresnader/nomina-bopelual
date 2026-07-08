@@ -20,6 +20,7 @@ function FichaTab({ col, onGuardado, onError }) {
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
     cuenta_bancaria: col.cuenta_bancaria ?? '', forma_pago: col.forma_pago ?? 'TRANSFERENCIA',
+    pct_anticipo: col.pct_anticipo ?? '',
   });
 
   const guardar = async (e) => {
@@ -29,6 +30,7 @@ function FichaTab({ col, onGuardado, onError }) {
         ...form,
         fecha_ingreso: form.fecha_ingreso || null,
         cargas_personales: Number(form.cargas_personales) || 0,
+        pct_anticipo: form.pct_anticipo === '' ? null : Number(form.pct_anticipo),
       });
       onGuardado();
     } catch (err) {
@@ -61,6 +63,15 @@ function FichaTab({ col, onGuardado, onError }) {
           </label>
           <label className="text-sm text-slate-600">Centro de costo {campo('centro_costo')}</label>
           <label className="text-sm text-slate-600">Cargas personales {campo('cargas_personales', { type: 'number', min: 0 })}</label>
+          <label className="text-sm text-slate-600">Anticipo 1ra quincena
+            <select className="input w-full" value={form.pct_anticipo}
+              onChange={(e) => setForm({ ...form, pct_anticipo: e.target.value })}>
+              <option value="">Global (parámetro, 40%)</option>
+              <option value="0.4">40% / 60%</option>
+              <option value="0.5">50% / 50%</option>
+              <option value="0.6">60% / 40%</option>
+            </select>
+          </label>
         </div>
       </Card>
 

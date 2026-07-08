@@ -46,14 +46,16 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
     );
     const rolId = rolRows[0].id;
     const sueldo = Number(col.sueldo_base);
+    // El % de anticipo del colaborador manda; sin él aplica el parámetro global.
+    const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipo;
 
     if (quincena === 1) {
       await insertarLinea(client, rolId, {
-        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo, pctAnticipo),
-        desc: 'Anticipo primera quincena'
+        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo, pct),
+        desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)`
       });
     } else {
-      const pctSegunda = round2(1 - pctAnticipo);
+      const pctSegunda = round2(1 - pct);
       await insertarLinea(client, rolId, {
         tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda),
         desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`

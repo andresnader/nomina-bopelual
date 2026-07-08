@@ -6,3 +6,4 @@ DROP TABLE IF EXISTS lineas_rol, roles_pago, facturas_proveedor, prestamos,
 \i migrations/001_init.sql
 \i migrations/002_datos_bancarios_empresa.sql
 \i migrations/003_talento_humano.sql
+\i migrations/004_pct_anticipo_colaborador.sql

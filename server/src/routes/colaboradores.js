@@ -93,7 +93,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   const campos = [
     'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
-    'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria'
+    'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo'
   ];
   const set = [];
   const params = [];
