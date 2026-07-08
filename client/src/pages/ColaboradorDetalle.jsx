@@ -188,7 +188,8 @@ function PrestamosTab({ col, onError }) {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const cargar = () => api.get(`/prestamos?colaborador_id=${col.id}`).then(setPrestamos).catch((e) => onError(e.message));
+  const cargar = () => api.get(`/prestamos?colaborador_id=${col.id}&per_page=100`)
+    .then((r) => setPrestamos(r.data || r)).catch((e) => onError(e.message));
   useEffect(() => { cargar(); }, [col.id]);
 
   const crear = async (e) => {

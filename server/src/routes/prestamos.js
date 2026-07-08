@@ -11,10 +11,14 @@ const SORT_VALIDO = { nombre: 'c.nombre', fecha_inicio: 'p.fecha_inicio', saldo:
 // Lista paginada con búsqueda por colaborador y filtro por estado.
 // Devuelve además los totales globales del filtro (para los KPIs).
 router.get('/', async (req, res) => {
-  const { q, activo, sort, order, page, per_page } = req.query;
+  const { colaborador_id, q, activo, sort, order, page, per_page } = req.query;
   const cond = [];
   const params = [];
 
+  if (colaborador_id) {
+    params.push(colaborador_id);
+    cond.push(`p.colaborador_id=$${params.length}`);
+  }
   if (activo !== undefined) {
     params.push(activo === 'true');
     cond.push(`p.activo=$${params.length}`);
