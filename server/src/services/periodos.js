@@ -50,32 +50,48 @@ export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, p
   return agregadas;
 }
 
-// Aplica al rol los descuentos recurrentes activos que aún no tenga (por
-// descuento_recurrente_id) y que correspondan a esta quincena.
+// Aplica al rol los descuentos recurrentes activos que correspondan a esta
+// quincena: inserta los que aún no tenga (por descuento_recurrente_id) y
+// refresca el monto/tipo/descripción de los que ya tenga si el descuento
+// origen fue editado después de generado el rol.
 export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, quincena) {
   const { rows: descuentos } = await client.query(
     `SELECT d.* FROM descuentos_recurrentes d
-     WHERE d.colaborador_id=$1 AND d.activo=true AND d.aplicar_en IN (0,$2)
-       AND NOT EXISTS (
-         SELECT 1 FROM lineas_rol l WHERE l.rol_pago_id=$3 AND l.descuento_recurrente_id=d.id
-       )`,
-    [colaboradorId, quincena, rolId]
+     WHERE d.colaborador_id=$1 AND d.activo=true AND d.aplicar_en IN (0,$2)`,
+    [colaboradorId, quincena]
   );
+  let agregadas = 0;
   for (const d of descuentos) {
-    await client.query(
-      `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, descuento_recurrente_id)
-       VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
-      [rolId, d.tipo_linea, Number(d.monto), d.notas, d.id]
+    const { rows: existentes } = await client.query(
+      'SELECT id, tipo_linea, monto, descripcion FROM lineas_rol WHERE rol_pago_id=$1 AND descuento_recurrente_id=$2',
+      [rolId, d.id]
     );
-    if (d.cuotas_restantes != null) {
-      const restantes = d.cuotas_restantes - 1;
+    if (existentes.length === 0) {
       await client.query(
-        'UPDATE descuentos_recurrentes SET cuotas_restantes=$1, activo=$2 WHERE id=$3',
-        [restantes, restantes > 0, d.id]
+        `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, descuento_recurrente_id)
+         VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
+        [rolId, d.tipo_linea, Number(d.monto), d.notas, d.id]
       );
+      if (d.cuotas_restantes != null) {
+        const restantes = d.cuotas_restantes - 1;
+        await client.query(
+          'UPDATE descuentos_recurrentes SET cuotas_restantes=$1, activo=$2 WHERE id=$3',
+          [restantes, restantes > 0, d.id]
+        );
+      }
+      agregadas++;
+    } else {
+      const linea = existentes[0];
+      const montoNuevo = Number(d.monto);
+      if (linea.tipo_linea !== d.tipo_linea || Number(linea.monto) !== montoNuevo || linea.descripcion !== d.notas) {
+        await client.query(
+          'UPDATE lineas_rol SET tipo_linea=$1, monto=$2, descripcion=$3 WHERE id=$4',
+          [d.tipo_linea, montoNuevo, d.notas, linea.id]
+        );
+      }
     }
   }
-  return descuentos.length;
+  return agregadas;
 }
 
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.

@@ -58,6 +58,45 @@ describe('POST /api/roles/:id/sincronizar', () => {
     expect(final.filter((l) => l.tipo_linea === 'CUOTA_PRESTAMO')).toHaveLength(1);
   });
 
+  it('actualiza el monto de una línea ya generada cuando se edita el descuento origen', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncEdit ${Date.now()}`, cedula: `SE${Date.now() % 1e8}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+
+    // Descuento creado ANTES del período: se aplica automáticamente al generar roles.
+    const desc = (
+      await auth(request(app).post('/api/descuentos')).send({
+        colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 15, aplicar_en: 0
+      })
+    ).body;
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync edit ${Date.now()}`, fecha_inicio: '2026-11-16', fecha_fin: '2026-11-30', quincena: 2
+    });
+    const det1 = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det1.body.roles_pago.find((r) => r.colaborador_id === col.id);
+
+    const antes = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    expect(antes.find((l) => l.tipo_linea === 'ALIMENTACION').monto).toBe('15.00');
+
+    // Se edita el monto del descuento DESPUÉS de generado el rol.
+    await auth(request(app).patch(`/api/descuentos/${desc.id}`)).send({ monto: 22 });
+
+    const sync = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
+    expect(sync.status).toBe(200);
+
+    const despues = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    const linea = despues.find((l) => l.tipo_linea === 'ALIMENTACION');
+    expect(linea.monto).toBe('22.00');
+    expect(despues.filter((l) => l.tipo_linea === 'ALIMENTACION')).toHaveLength(1);
+  });
+
   it('rechaza sincronizar un período que no está en BORRADOR', async () => {
     const app = createApp();
     const col = (
