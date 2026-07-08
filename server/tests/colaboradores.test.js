@@ -52,6 +52,40 @@ describe('colaboradores', () => {
     expect(rows[0].activos).toBe(1);
   });
 
+  it('PATCH acepta y persiste datos personales nuevos', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `Datos personales ${Date.now()}`, cedula: `DP${Date.now() % 1e8}`
+      })
+    ).body;
+
+    const res = await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({
+      fecha_nacimiento: '1990-05-20',
+      sexo: 'F',
+      estado_civil: 'CASADO',
+      direccion: 'Av. Siempre Viva 123'
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.fecha_nacimiento.slice(0, 10)).toBe('1990-05-20');
+    expect(res.body.sexo).toBe('F');
+    expect(res.body.estado_civil).toBe('CASADO');
+    expect(res.body.direccion).toBe('Av. Siempre Viva 123');
+  });
+
+  it('PATCH rechaza un sexo fuera del catálogo con 400 (no se cuelga)', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `Sexo invalido ${Date.now()}`, cedula: `SX${Date.now() % 1e8}`
+      })
+    ).body;
+
+    const res = await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ sexo: 'X' });
+    expect(res.status).toBe(400);
+  });
+
   it('COLABORADOR no puede listar colaboradores', async () => {
     // Cambia el rol del usuario mock a COLABORADOR para este caso.
     await pool.query(`UPDATE usuarios SET rol='COLABORADOR' WHERE email='rrhh@bopelual.com'`);

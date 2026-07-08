@@ -93,7 +93,8 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   const campos = [
     'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
-    'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo'
+    'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
+    'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion'
   ];
   const set = [];
   const params = [];
@@ -105,12 +106,16 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   }
   if (set.length === 0) return res.status(400).json({ error: 'nada que actualizar' });
   params.push(req.params.id);
-  const { rows } = await pool.query(
-    `UPDATE colaboradores SET ${set.join(', ')} WHERE id=$${params.length} RETURNING *`,
-    params
-  );
-  if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
-  res.json(rows[0]);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE colaboradores SET ${set.join(', ')} WHERE id=$${params.length} RETURNING *`,
+      params
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // Nuevo contrato: cierra el contrato activo previo y crea el nuevo (historial de sueldos).
