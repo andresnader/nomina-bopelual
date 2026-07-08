@@ -11,8 +11,28 @@ if (!filePath) {
   process.exit(1);
 }
 
+function normalizar(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+}
+
+function matchScore(excelName, dbName) {
+  const exParts = normalizar(excelName).split(/\s+/).filter(Boolean);
+  const dbParts = normalizar(dbName).split(/\s+/).filter(Boolean);
+  if (exParts.length === 0 || dbParts.length === 0) return 0;
+  let matches = 0;
+  for (const ex of exParts) {
+    if (dbParts.some(dp => dp === ex || dp.includes(ex) || ex.includes(dp))) {
+      matches++; continue;
+    }
+    if (ex.length >= 4 && dbParts.some(dp => dp.length >= 4 && dp.slice(0, 4) === ex.slice(0, 4))) {
+      matches++; continue;
+    }
+  }
+  return matches / exParts.length;
+}
+
 function parsePlazo(texto) {
-  if (!texto) return 1; // 1 mes por defecto
+  if (!texto) return 1;
   const match = texto.toString().match(/(\d+)/);
   return match ? parseInt(match[1], 10) : 1;
 }
@@ -26,38 +46,39 @@ async function run() {
 
   const fileData = fs.readFileSync(absolutePath);
   const wb = xlsx.read(fileData, { type: 'buffer' });
-  const sheet = wb.Sheets[wb.SheetNames[0]]; // Asumimos la primera hoja
-  // Leemos como array de arrays para ignorar los nombres mezclados de las columnas fusionadas
+  const sheet = wb.Sheets[wb.SheetNames[0]];
   const data = xlsx.utils.sheet_to_json(sheet, { header: 1 });
 
-  // A partir de la fila 6 (índice 5) están los datos
-  const rows = data.slice(5).filter(r => r[1]); // r[1] es el EMPLEADO
+  const rows = data.slice(5).filter(r => r[1]);
 
   const client = await pool.connect();
   
   try {
     await client.query('BEGIN');
-    
-    // Obtener todos los colaboradores para mapeo
+
     const { rows: colaboradores } = await client.query('SELECT id, nombre FROM colaboradores');
     let noEncontrados = 0;
     let importados = 0;
 
     for (const r of rows) {
-      const nombreExcel = r[1].toString().trim().toUpperCase();
-      
-      // Buscar match (split por espacio, verificar que algún nombre y apellido coincida o similar)
-      const partes = nombreExcel.split(' ').filter(Boolean);
-      let colaborador = colaboradores.find(c => {
-        const full = (c.nombre || '').toUpperCase();
-        return partes.every(p => full.includes(p));
+      const nombreExcel = r[1].toString().trim();
+      const normExcel = normalizar(nombreExcel);
+
+      // Fuzzy matching: find the colaborador with best matchScore >= 0.5
+      let best = { idx: -1, score: 0 };
+      colaboradores.forEach((c, i) => {
+        const score = matchScore(normExcel, c.nombre);
+        if (score > best.score) { best = { idx: i, score }; }
       });
 
-      if (!colaborador) {
+      if (best.idx === -1 || best.score < 0.5) {
         console.warn(`[WARN] Colaborador no encontrado: ${nombreExcel}. Saltando fila.`);
         noEncontrados++;
         continue;
       }
+
+      const colaborador = colaboradores[best.idx];
+      console.log(`→ ${nombreExcel} → ${colaborador.nombre} (score: ${best.score.toFixed(2)})`);
 
       const colId = colaborador.id;
       const FECHA_INICIO = '2026-06-01'; // Como es JUNIO 2026, asumimos que los préstamos empiezan ahí o ya venían
