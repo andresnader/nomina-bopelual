@@ -15,6 +15,13 @@ import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
 const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Préstamos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
+const TIPO_CONTRATO_LABEL = {
+  INDEFINIDO: 'Indefinido',
+  PLAZO_FIJO: 'Plazo fijo / Ocasional',
+  PASANTIA: 'Prácticas / Pasantía',
+  PRESTACION_SERVICIOS: 'Prestación de servicios',
+};
+
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
   useEffect(() => {
@@ -138,13 +145,16 @@ function FichaTab({ col, onGuardado, onError }) {
 }
 
 function ContratosTab({ col, onCambio, onError }) {
-  const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '' });
+  const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
 
   const nuevoContrato = async (e) => {
     e.preventDefault();
     try {
-      await api.post(`/colaboradores/${col.id}/contratos`, contrato);
-      setContrato({ sueldo_base: '', fecha_inicio: '', notas: '' });
+      await api.post(`/colaboradores/${col.id}/contratos`, {
+        ...contrato,
+        tipo_contrato: contrato.tipo_contrato || null,
+      });
+      setContrato({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
       onCambio();
     } catch (err) {
       onError(err.message);
@@ -155,11 +165,19 @@ function ContratosTab({ col, onCambio, onError }) {
     <div className="grid gap-4">
       <Card>
         <h2 className="font-semibold mb-3">Nuevo contrato / aumento</h2>
-        <form onSubmit={nuevoContrato} className="grid md:grid-cols-4 gap-2">
+        <form onSubmit={nuevoContrato} className="grid md:grid-cols-5 gap-2">
           <input required type="number" step="0.01" placeholder="Sueldo base" className="input w-full"
             value={contrato.sueldo_base} onChange={(e) => setContrato({ ...contrato, sueldo_base: e.target.value })} />
           <input required type="date" className="input w-full"
             value={contrato.fecha_inicio} onChange={(e) => setContrato({ ...contrato, fecha_inicio: e.target.value })} />
+          <select className="input w-full" value={contrato.tipo_contrato}
+            onChange={(e) => setContrato({ ...contrato, tipo_contrato: e.target.value })}>
+            <option value="">Tipo de contrato —</option>
+            <option value="INDEFINIDO">Indefinido</option>
+            <option value="PLAZO_FIJO">Plazo fijo / Ocasional</option>
+            <option value="PASANTIA">Prácticas / Pasantía</option>
+            <option value="PRESTACION_SERVICIOS">Prestación de servicios</option>
+          </select>
           <input placeholder="Notas (motivo)" className="input w-full"
             value={contrato.notas} onChange={(e) => setContrato({ ...contrato, notas: e.target.value })} />
           <button className="btn btn-primary">Registrar</button>
@@ -169,7 +187,7 @@ function ContratosTab({ col, onCambio, onError }) {
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
-              <th className="p-3">Sueldo</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Notas</th>
+              <th className="p-3">Sueldo</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th>
             </tr>
           </thead>
           <tbody>
@@ -178,6 +196,7 @@ function ContratosTab({ col, onCambio, onError }) {
                 <td className="p-3 font-medium">{money(c.sueldo_base)}</td>
                 <td className="p-3">{fecha(c.fecha_inicio)}</td>
                 <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
+                <td className="p-3">{TIPO_CONTRATO_LABEL[c.tipo_contrato] ?? '—'}</td>
                 <td className="p-3 text-slate-500">{c.notas || '—'}</td>
               </tr>
             ))}
