@@ -10,8 +10,9 @@ import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
 import { useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
+import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
-const TABS = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
+const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
@@ -359,6 +360,24 @@ function EvaluacionesTab({ col, onError }) {
   );
 }
 
+function FacturasTab({ col }) {
+  const [facturas, setFacturas] = useState([]);
+  const toast = useToast();
+  const cargar = () => api.get(`/facturas?colaborador_id=${col.id}`).then(setFacturas).catch((e) => toast.error(e.message));
+  useEffect(() => { cargar(); }, [col.id]);
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <h2 className="font-semibold mb-3">Nueva factura</h2>
+        <FormFactura colaboradorId={col.id} onCreado={cargar} />
+      </Card>
+      <Card className="p-0 overflow-x-auto">
+        <TablaFacturas facturas={facturas} onCambio={cargar} conProveedor={false} />
+      </Card>
+    </div>
+  );
+}
+
 function RolesTab({ col }) {
   return (
     <Card className="p-0 overflow-x-auto">
@@ -398,6 +417,10 @@ export default function ColaboradorDetalle() {
 
   if (!col) return <Card>{error || 'Cargando…'}</Card>;
 
+  const tabs = col.tipo === 'EXTERNO'
+    ? [...TABS_BASE.slice(0, -1), 'Facturas', 'Roles de pago']
+    : TABS_BASE;
+
   return (
     <div className="animate-fade-in">
       <PageTitle>
@@ -407,7 +430,7 @@ export default function ColaboradorDetalle() {
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <div className="flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t} onClick={() => { setTab(t); setError(null); }}
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors ${
               tab === t
@@ -425,6 +448,7 @@ export default function ColaboradorDetalle() {
       {tab === 'Ausencias' && <AusenciasTab col={col} onError={setError} />}
       {tab === 'Documentos' && <DocumentosTab col={col} onError={setError} />}
       {tab === 'Evaluaciones' && <EvaluacionesTab col={col} onError={setError} />}
+      {tab === 'Facturas' && <FacturasTab col={col} />}
       {tab === 'Roles de pago' && <RolesTab col={col} />}
     </div>
   );
