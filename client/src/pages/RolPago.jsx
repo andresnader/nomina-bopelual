@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
 
 const NUEVA = { tipo_linea: '', clase: 'INGRESO', monto: '', descripcion: '' };
@@ -14,30 +16,41 @@ export default function RolPago() {
   const [rol, setRol] = useState(null);
   const [nueva, setNueva] = useState(NUEVA);
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   const cargar = () => api.get(`/roles/${id}`).then(setRol).catch((e) => setError(e.message));
-  useEffect(() => {
-    cargar();
-  }, [id]);
+  useEffect(() => { cargar(); }, [id]);
 
   const agregar = async (e) => {
     e.preventDefault();
-    setError(null);
     try {
       await api.post(`/roles/${id}/lineas`, { ...nueva, monto: Number(nueva.monto) });
       setNueva(NUEVA);
+      toast.success('Línea agregada.');
       cargar();
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     }
   };
 
   const eliminar = async (lineaId) => {
     try {
       await api.del(`/roles/${id}/lineas/${lineaId}`);
+      toast.success('Línea eliminada.');
       cargar();
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
+    }
+  };
+
+  const sincronizar = async () => {
+    try {
+      const r = await api.post(`/roles/${id}/sincronizar`);
+      if (r.agregadas > 0) toast.success(`Se agregaron ${r.agregadas} línea${r.agregadas !== 1 ? 's' : ''}.`);
+      else toast.info('Ya estaba al día.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
     }
   };
 
@@ -52,9 +65,18 @@ export default function RolPago() {
     <div>
       <PageTitle
         accion={
-          <button onClick={() => window.print()} className="border border-white/20 px-4 py-2 rounded-lg text-sm">
-            Imprimir
-          </button>
+          <div className="flex gap-2">
+            {editable && (
+              <RoleGate roles={['ADMIN', 'RRHH']}>
+                <button onClick={sincronizar} className="btn btn-secondary">
+                  <RefreshCw size={15} /> Sincronizar descuentos y préstamos
+                </button>
+              </RoleGate>
+            )}
+            <button onClick={() => window.print()} className="btn btn-secondary">
+              Imprimir
+            </button>
+          </div>
         }
       >
         Comprobante — {rol.colaborador_nombre}
@@ -112,9 +134,7 @@ export default function RolPago() {
               <input required type="number" step="0.01" placeholder="Monto" value={nueva.monto}
                 onChange={(e) => setNueva({ ...nueva, monto: e.target.value })}
                 className="input w-full" />
-              <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold rounded-lg text-sm">
-                Agregar
-              </button>
+              <button className="btn btn-primary">Agregar</button>
             </form>
           </Card>
         </RoleGate>
