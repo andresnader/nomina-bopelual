@@ -74,4 +74,14 @@ describe('reportes', () => {
     // Restaura para no afectar otros tests.
     await auth(request(app).put('/api/parametros/SBU')).send({ valor: '460.00' });
   });
+
+  it('documentos-faltantes lista colaboradores activos sin documentos', async () => {
+    const app = createApp();
+    const sinDoc = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `SinDoc ${Date.now()}`, cedula: `SD${Date.now() % 1e8}`
+    })).body;
+    const res = await auth(request(app).get('/api/reportes/documentos-faltantes'));
+    expect(res.status).toBe(200);
+    expect(res.body.some((c) => c.id === sinDoc.id)).toBe(true);
+  });
 });

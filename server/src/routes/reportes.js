@@ -52,4 +52,15 @@ router.get('/costo-departamento', async (_req, res) => {
   res.json(Object.values(mapa));
 });
 
+router.get('/documentos-faltantes', async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.nombre, c.tipo, c.empresa
+     FROM colaboradores c
+     WHERE c.activo=true
+       AND NOT EXISTS (SELECT 1 FROM documentos d WHERE d.colaborador_id=c.id)
+     ORDER BY c.nombre`
+  );
+  res.json(rows);
+});
+
 export default router;
