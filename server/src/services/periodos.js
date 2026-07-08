@@ -61,6 +61,7 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
     [colaboradorId, quincena]
   );
   let agregadas = 0;
+  let actualizadas = 0;
   for (const d of descuentos) {
     const { rows: existentes } = await client.query(
       'SELECT id, tipo_linea, monto, descripcion FROM lineas_rol WHERE rol_pago_id=$1 AND descuento_recurrente_id=$2',
@@ -88,10 +89,11 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
           'UPDATE lineas_rol SET tipo_linea=$1, monto=$2, descripcion=$3 WHERE id=$4',
           [d.tipo_linea, montoNuevo, d.notas, linea.id]
         );
+        actualizadas++;
       }
     }
   }
-  return agregadas;
+  return { agregadas, actualizadas };
 }
 
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
@@ -161,6 +163,32 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
     creados++;
   }
   return { creados };
+}
+
+// Sincroniza TODOS los roles de un período de una sola vez: agrega préstamos/
+// descuentos creados después de generar el período y refresca el monto de los
+// que ya tenían línea pero fueron editados. Mismo criterio que sincronizar un
+// rol individual (server/src/routes/roles.js), solo que aplicado en bloque.
+export async function sincronizarPeriodo(client, periodoId) {
+  const { rows: periodoRows } = await client.query('SELECT * FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
+  if (periodoRows.length === 0) throw new Error('período no existe');
+  if (periodoRows[0].estado !== 'BORRADOR') {
+    throw new Error(`período ${periodoRows[0].estado}: no editable`);
+  }
+  const { rows: roles } = await client.query(
+    'SELECT id, colaborador_id FROM roles_pago WHERE periodo_id=$1', [periodoId]
+  );
+
+  let agregadas = 0;
+  let actualizadas = 0;
+  for (const rol of roles) {
+    agregadas += await aplicarPrestamosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].fecha_fin);
+    const descuentos = await aplicarDescuentosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena);
+    agregadas += descuentos.agregadas;
+    actualizadas += descuentos.actualizadas;
+    await recalcularTotales(client, rol.id);
+  }
+  return { roles: roles.length, agregadas, actualizadas };
 }
 
 // Aplica una transición de estado del período usando la FSM.

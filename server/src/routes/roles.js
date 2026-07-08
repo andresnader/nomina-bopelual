@@ -107,10 +107,10 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
       return res.status(409).json({ error: `período ${rows[0].estado}: no editable` });
     }
     const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
-    const agregadosDescuentos = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena);
+    const { agregadas: agregadosDescuentos, actualizadas } = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena);
     const totales = await recalcularTotales(client, req.params.id);
     await client.query('COMMIT');
-    res.json({ ...totales, agregadas: agregadosPrestamos + agregadosDescuentos });
+    res.json({ ...totales, agregadas: agregadosPrestamos + agregadosDescuentos, actualizadas });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });

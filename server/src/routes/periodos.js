@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { crearPeriodo, generarRoles, transicionarPeriodo } from '../services/periodos.js';
+import { crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo } from '../services/periodos.js';
 import { generarTxtPichincha } from '../lib/txt-pichincha.js';
 import { round2 } from '../lib/round.js';
 
@@ -77,6 +77,24 @@ function accionHandler(accion) {
 }
 router.post('/:id/aprobar', requireRole(['RRHH']), accionHandler('aprobar'));
 router.post('/:id/cerrar', requireRole(['RRHH']), accionHandler('cerrar'));
+
+// Sincroniza de una sola vez los préstamos/descuentos de TODOS los roles del período
+// (equivalente a llamar /roles/:id/sincronizar por cada colaborador).
+router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resultado = await sincronizarPeriodo(client, req.params.id);
+    await client.query('COMMIT');
+    res.json(resultado);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    const code = e.message === 'período no existe' ? 404 : e.message.includes('no editable') ? 409 : 500;
+    res.status(code).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 // Archivo de pago masivo Cash Management (Banco Pichincha) del período.
 // Filtros: ?empresa=BOPELUAL S.A.&grupo=ADM|COMERCIAL|SERV_PROF

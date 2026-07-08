@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Download } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
@@ -78,6 +79,7 @@ export default function PeriodoDetalle() {
   const { id } = useParams();
   const [periodo, setPeriodo] = useState(null);
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   const cargar = () => api.get(`/periodos/${id}`).then(setPeriodo).catch((e) => setError(e.message));
   useEffect(() => {
@@ -94,14 +96,35 @@ export default function PeriodoDetalle() {
     }
   };
 
+  const sincronizar = async () => {
+    try {
+      const r = await api.post(`/periodos/${id}/sincronizar`);
+      const partes = [];
+      if (r.agregadas > 0) partes.push(`${r.agregadas} agregada${r.agregadas !== 1 ? 's' : ''}`);
+      if (r.actualizadas > 0) partes.push(`${r.actualizadas} actualizada${r.actualizadas !== 1 ? 's' : ''}`);
+      if (partes.length > 0) toast.success(`Líneas ${partes.join(' y ')} en ${r.roles} rol${r.roles !== 1 ? 'es' : ''}.`);
+      else toast.info('Ya estaba al día.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   if (!periodo) return <Card>{error || 'Cargando…'}</Card>;
 
   return (
     <div>
       <PageTitle
         accion={
-          <RoleGate roles={['RRHH']}>
-            <div className="flex gap-2">
+          <div className="flex gap-2">
+            {periodo.estado === 'BORRADOR' && (
+              <RoleGate roles={['ADMIN', 'RRHH']}>
+                <button onClick={sincronizar} className="btn btn-secondary">
+                  <RefreshCw size={15} /> Sincronizar descuentos y préstamos
+                </button>
+              </RoleGate>
+            )}
+            <RoleGate roles={['RRHH']}>
               {periodo.estado === 'BORRADOR' && (
                 <button onClick={() => accion('aprobar')}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Aprobar</button>
@@ -110,8 +133,8 @@ export default function PeriodoDetalle() {
                 <button onClick={() => accion('cerrar')}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Cerrar</button>
               )}
-            </div>
-          </RoleGate>
+            </RoleGate>
+          </div>
         }
       >
         {periodo.nombre} <Badge estado={periodo.estado} />

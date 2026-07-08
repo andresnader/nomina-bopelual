@@ -118,3 +118,81 @@ describe('POST /api/roles/:id/sincronizar', () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe('POST /api/periodos/:id/sincronizar', () => {
+  beforeEach(async () => {
+    await pool.query(`INSERT INTO usuarios (email, rol) VALUES ('rrhh@bopelual.com','RRHH')
+      ON CONFLICT (email) DO UPDATE SET activo=true, rol='RRHH'`);
+  });
+
+  it('sincroniza todos los roles del período: agrega descuentos nuevos y actualiza los editados', async () => {
+    const app = createApp();
+    const col1 = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncMasivo1 ${Date.now()}`, cedula: `SM1${Date.now() % 1e7}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col1.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const col2 = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncMasivo2 ${Date.now()}`, cedula: `SM2${Date.now() % 1e7}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col2.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+
+    // Descuento de col1 creado ANTES del período: se aplica al generar roles.
+    const desc1 = (
+      await auth(request(app).post('/api/descuentos')).send({
+        colaborador_id: col1.id, tipo_linea: 'ALIMENTACION', monto: 10, aplicar_en: 0
+      })
+    ).body;
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync masivo ${Date.now()}`, fecha_inicio: '2026-10-16', fecha_fin: '2026-10-31', quincena: 2
+    });
+    const periodoId = per.body.periodo.id;
+    const det1 = await auth(request(app).get(`/api/periodos/${periodoId}`));
+    const rol1 = det1.body.roles_pago.find((r) => r.colaborador_id === col1.id);
+    const rol2 = det1.body.roles_pago.find((r) => r.colaborador_id === col2.id);
+
+    // Descuento de col2 creado DESPUÉS de generado el período: aún no tiene línea.
+    await auth(request(app).post('/api/descuentos')).send({
+      colaborador_id: col2.id, tipo_linea: 'ALIMENTACION', monto: 8, aplicar_en: 0
+    });
+    // Se edita el descuento de col1 DESPUÉS de generado su rol.
+    await auth(request(app).patch(`/api/descuentos/${desc1.id}`)).send({ monto: 25 });
+
+    const sync = await auth(request(app).post(`/api/periodos/${periodoId}/sincronizar`));
+    expect(sync.status).toBe(200);
+    expect(sync.body.agregadas).toBe(1);
+    expect(sync.body.actualizadas).toBe(1);
+
+    const lineas1 = (await auth(request(app).get(`/api/roles/${rol1.id}`))).body.lineas;
+    expect(lineas1.find((l) => l.tipo_linea === 'ALIMENTACION').monto).toBe('25.00');
+
+    const lineas2 = (await auth(request(app).get(`/api/roles/${rol2.id}`))).body.lineas;
+    expect(lineas2.find((l) => l.tipo_linea === 'ALIMENTACION').monto).toBe('8.00');
+  });
+
+  it('rechaza sincronizar un período que no está en BORRADOR', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncPeriodoCerrado ${Date.now()}`, cedula: `SP${Date.now() % 1e8}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync periodo cerrado ${Date.now()}`, fecha_inicio: '2026-12-16', fecha_fin: '2026-12-31', quincena: 2
+    });
+    await auth(request(app).post(`/api/periodos/${per.body.periodo.id}/aprobar`));
+    const res = await auth(request(app).post(`/api/periodos/${per.body.periodo.id}/sincronizar`));
+    expect(res.status).toBe(409);
+  });
+});

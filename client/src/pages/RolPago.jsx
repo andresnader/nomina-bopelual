@@ -46,7 +46,10 @@ export default function RolPago() {
   const sincronizar = async () => {
     try {
       const r = await api.post(`/roles/${id}/sincronizar`);
-      if (r.agregadas > 0) toast.success(`Se agregaron ${r.agregadas} línea${r.agregadas !== 1 ? 's' : ''}.`);
+      const partes = [];
+      if (r.agregadas > 0) partes.push(`${r.agregadas} agregada${r.agregadas !== 1 ? 's' : ''}`);
+      if (r.actualizadas > 0) partes.push(`${r.actualizadas} actualizada${r.actualizadas !== 1 ? 's' : ''}`);
+      if (partes.length > 0) toast.success(`Líneas ${partes.join(' y ')}.`);
       else toast.info('Ya estaba al día.');
       cargar();
     } catch (err) {
