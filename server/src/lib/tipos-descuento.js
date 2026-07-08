@@ -1,7 +1,7 @@
-// Catálogo de conceptos de descuento observados en la nómina real (junio 2026).
-// tipo_linea es texto libre en la BD; este catálogo alimenta los selects de la
-// UI y valida las altas de descuentos recurrentes.
-export const TIPOS_DESCUENTO = [
+import pool from '../db/pool.js';
+
+// Catálogo por defecto (usado como fallback si la tabla no existe aún).
+const TIPOS_FALLBACK = [
   { tipo: 'ALIMENTACION', label: 'Alimentación' },
   { tipo: 'COMISARIATO', label: 'Comisariato' },
   { tipo: 'SALUDSA', label: 'SaludSA' },
@@ -19,5 +19,18 @@ export const TIPOS_DESCUENTO = [
   { tipo: 'DESCUENTO_VARIOS', label: 'Descuento varios' },
 ];
 
-export const esTipoDescuentoValido = (tipo) =>
-  TIPOS_DESCUENTO.some((t) => t.tipo === tipo);
+export async function obtenerTipos() {
+  try {
+    const { rows } = await pool.query(
+      'SELECT codigo AS tipo, nombre AS label FROM servicios_descuento WHERE activo=true ORDER BY codigo'
+    );
+    return rows.length ? rows : TIPOS_FALLBACK;
+  } catch {
+    return TIPOS_FALLBACK;
+  }
+}
+
+export async function esTipoDescuentoValido(tipo) {
+  const tipos = await obtenerTipos();
+  return tipos.some((t) => t.tipo === tipo);
+}

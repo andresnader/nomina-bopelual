@@ -6,7 +6,7 @@ import PageTitle from '../components/PageTitle.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 
-const TABS = ['General', 'Empresas', 'Bancos', 'Usuarios'];
+const TABS = ['General', 'Empresas', 'Servicios de Descuento', 'Bancos', 'Usuarios'];
 
 const ETIQUETAS_PARAMETRO = {
   SBU: 'Salario Básico Unificado (SBU)',
@@ -287,6 +287,110 @@ function UsuariosTab() {
   );
 }
 
+function ServiciosDescuentoTab() {
+  const [servicios, setServicios] = useState([]);
+  const [form, setForm] = useState({ codigo: '', nombre: '' });
+  const [editando, setEditando] = useState(null);
+  const toast = useToast();
+
+  const cargar = () => api.get('/servicios-descuento').then(setServicios).catch((e) => toast.error(e.message));
+  useEffect(() => { cargar(); }, []);
+
+  const crear = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/servicios-descuento', form);
+      setForm({ codigo: '', nombre: '' });
+      toast.success('Servicio agregado.');
+      cargar();
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message);
+    }
+  };
+
+  const guardarEdicion = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/servicios-descuento/${editando.codigo}`, { nombre: editando.nombre });
+      toast.success('Servicio actualizado.');
+      setEditando(null);
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const alternar = async (s) => {
+    try {
+      await api.patch(`/servicios-descuento/${s.codigo}`, { activo: !s.activo });
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <Card>
+      <h2 className="font-display font-bold mb-1">Servicios de descuento</h2>
+      <p className="text-sm text-muted mb-3">
+        Catálogo de conceptos disponibles para aplicar como descuento recurrente a los colaboradores.
+        Los inactivos no aparecen en los selects al crear descuentos.
+      </p>
+
+      <form onSubmit={crear} className="grid md:grid-cols-4 gap-2 mb-3">
+        <input required placeholder="Código (ej. SEGURO_VIDA)" className="input w-full font-mono text-sm" value={form.codigo}
+          onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+        <input required placeholder="Nombre del servicio" className="input w-full md:col-span-2" value={form.nombre}
+          onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+        <button className="btn btn-primary">Agregar servicio</button>
+      </form>
+
+      <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left sticky top-0 bg-white">
+            <tr className="border-b border-slate-200">
+              <th className="p-2">Código</th>
+              <th className="p-2">Nombre</th>
+              <th className="p-2 w-28">Estado</th>
+              <th className="p-2 w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {servicios.map((s) => (
+              <tr key={s.codigo} className={`border-b border-slate-100 ${!s.activo && 'opacity-50'}`}>
+                <td className="p-2 font-mono text-xs">{s.codigo}</td>
+                <td className="p-2">{s.nombre}</td>
+                <td className="p-2">
+                  <button onClick={() => alternar(s)}
+                    className={s.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                    {s.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </button>
+                </td>
+                <td className="p-2">
+                  <button onClick={() => setEditando({ codigo: s.codigo, nombre: s.nombre })} className="text-gold-600 text-xs hover:underline">
+                    Editar
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {servicios.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin servicios.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!editando} onClose={() => setEditando(null)} title={`Editar servicio — ${editando?.codigo}`} size="sm"
+        footer={<button type="submit" form="form-editar-servicio" className="btn btn-primary">Guardar</button>}>
+        <form id="form-editar-servicio" onSubmit={guardarEdicion}>
+          <label className="text-sm text-slate-600">Nombre del servicio
+            <input required autoFocus className="input w-full mt-1" value={editando?.nombre ?? ''}
+              onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} />
+          </label>
+        </form>
+      </Modal>
+    </Card>
+  );
+}
+
 export default function Configuracion() {
   const [tab, setTab] = useState('General');
   return (
@@ -306,6 +410,7 @@ export default function Configuracion() {
       </div>
       {tab === 'General' && <GeneralTab />}
       {tab === 'Empresas' && <EmpresasTab />}
+      {tab === 'Servicios de Descuento' && <ServiciosDescuentoTab />}
       {tab === 'Bancos' && <BancosTab />}
       {tab === 'Usuarios' && <UsuariosTab />}
     </div>

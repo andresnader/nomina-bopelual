@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { TIPOS_DESCUENTO, esTipoDescuentoValido } from '../lib/tipos-descuento.js';
+import { obtenerTipos, esTipoDescuentoValido } from '../lib/tipos-descuento.js';
 
 const router = Router();
 router.use(requireAuth, requireRole(['ADMIN', 'RRHH']));
 
-router.get('/tipos', (_req, res) => res.json(TIPOS_DESCUENTO));
+router.get('/tipos', async (_req, res) => res.json(await obtenerTipos()));
 
 // Lista global (con nombre del colaborador) o filtrada por colaborador.
 router.get('/', async (req, res) => {
@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
   if (!colaborador_id || !tipo_linea || !monto) {
     return res.status(400).json({ error: 'colaborador_id, tipo_linea y monto requeridos' });
   }
-  if (!esTipoDescuentoValido(tipo_linea)) {
+  if (!(await esTipoDescuentoValido(tipo_linea))) {
     return res.status(400).json({ error: `tipo_linea desconocido: ${tipo_linea}` });
   }
   try {

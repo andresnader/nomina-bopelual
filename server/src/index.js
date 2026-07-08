@@ -13,6 +13,7 @@ import facturasRouter from './routes/facturas.js';
 import reportesRouter from './routes/reportes.js';
 import usuariosRouter from './routes/usuarios.js';
 import descuentosRouter from './routes/descuentos.js';
+import serviciosDescuentoRouter from './routes/servicios-descuento.js';
 import bancosRouter from './routes/bancos.js';
 import empresasRouter from './routes/empresas.js';
 import ausenciasRouter from './routes/ausencias.js';
@@ -49,6 +50,7 @@ export function createApp() {
   app.use('/api/facturas', facturasRouter);
   app.use('/api/reportes', reportesRouter);
   app.use('/api/descuentos', descuentosRouter);
+  app.use('/api/servicios-descuento', serviciosDescuentoRouter);
   app.use('/api/bancos', bancosRouter);
   app.use('/api/empresas', empresasRouter);
   app.use('/api/ausencias', ausenciasRouter);
