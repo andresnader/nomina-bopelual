@@ -27,6 +27,8 @@ function FichaTab({ col, onGuardado, onError }) {
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
     cuenta_bancaria: col.cuenta_bancaria ?? '', forma_pago: col.forma_pago ?? 'TRANSFERENCIA',
     pct_anticipo: col.pct_anticipo ?? '',
+    fecha_nacimiento: col.fecha_nacimiento?.slice(0, 10) ?? '', sexo: col.sexo ?? '',
+    estado_civil: col.estado_civil ?? '', direccion: col.direccion ?? '',
   });
 
   const guardar = async (e) => {
@@ -37,6 +39,10 @@ function FichaTab({ col, onGuardado, onError }) {
         fecha_ingreso: form.fecha_ingreso || null,
         cargas_personales: Number(form.cargas_personales) || 0,
         pct_anticipo: form.pct_anticipo === '' ? null : Number(form.pct_anticipo),
+        fecha_nacimiento: form.fecha_nacimiento || null,
+        sexo: form.sexo || null,
+        estado_civil: form.estado_civil || null,
+        direccion: form.direccion || null,
       });
       onGuardado();
     } catch (err) {
@@ -59,6 +65,25 @@ function FichaTab({ col, onGuardado, onError }) {
           <label className="text-sm text-slate-600">Email {campo('email', { type: 'email' })}</label>
           <label className="text-sm text-slate-600">Departamento {campo('departamento')}</label>
           <label className="text-sm text-slate-600">Cargo {campo('cargo')}</label>
+          <label className="text-sm text-slate-600">Fecha de nacimiento {campo('fecha_nacimiento', { type: 'date' })}</label>
+          <label className="text-sm text-slate-600">Sexo
+            <select className="input w-full" value={form.sexo} onChange={(e) => setForm({ ...form, sexo: e.target.value })}>
+              <option value="">—</option>
+              <option value="F">Femenino</option>
+              <option value="M">Masculino</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">Estado civil
+            <select className="input w-full" value={form.estado_civil} onChange={(e) => setForm({ ...form, estado_civil: e.target.value })}>
+              <option value="">—</option>
+              <option value="SOLTERO">Soltero/a</option>
+              <option value="CASADO">Casado/a</option>
+              <option value="DIVORCIADO">Divorciado/a</option>
+              <option value="VIUDO">Viudo/a</option>
+              <option value="UNION_LIBRE">Unión libre</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">Dirección de domicilio {campo('direccion')}</label>
           <label className="text-sm text-slate-600">Fecha de ingreso (IESS) {campo('fecha_ingreso', { type: 'date' })}</label>
           <label className="text-sm text-slate-600">Empresa
             <select className="input w-full" value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })}>
