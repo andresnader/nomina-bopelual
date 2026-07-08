@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Download, Trash2, Star } from 'lucide-react';
+import { Download, Pencil, Star, Trash2 } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { money, fecha } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
+import { AbonoModal, CuotaModal } from './Prestamos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
 import { useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
-const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
+const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Préstamos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
@@ -175,6 +176,131 @@ function DescuentosTab({ col, onError }) {
       <Card className="p-0 overflow-x-auto">
         <TablaDescuentos descuentos={descuentos} onCambio={cargar} conColaborador={false} />
       </Card>
+    </div>
+  );
+}
+
+function PrestamosTab({ col, onError }) {
+  const [prestamos, setPrestamos] = useState([]);
+  const [form, setForm] = useState({ monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '' });
+  const [modalAbono, setModalAbono] = useState(null);
+  const [modalCuota, setModalCuota] = useState(null);
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  const cargar = () => api.get(`/prestamos?colaborador_id=${col.id}`).then(setPrestamos).catch((e) => onError(e.message));
+  useEffect(() => { cargar(); }, [col.id]);
+
+  const crear = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/prestamos', {
+        colaborador_id: col.id, monto_total: Number(form.monto_total),
+        cuota_quincena: Number(form.cuota_quincena), fecha_inicio: form.fecha_inicio, notas: form.notas || null,
+      });
+      setForm({ monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '' });
+      toast.success('Préstamo registrado.');
+      cargar();
+    } catch (err) {
+      onError(err.message);
+    }
+  };
+
+  const eliminar = async (p) => {
+    if (Number(p.saldo_pendiente) !== Number(p.monto_total)) {
+      return onError('No se puede eliminar: el préstamo ya tiene pagos aplicados.');
+    }
+    const ok = await confirm({
+      title: 'Eliminar préstamo',
+      message: `¿Eliminar préstamo de ${money(p.monto_total)}?`,
+      confirmLabel: 'Eliminar', danger: true,
+    });
+    if (!ok) return;
+    try { await api.del(`/prestamos/${p.id}`); toast.success('Préstamo eliminado.'); cargar(); }
+    catch (err) { onError(err.message); }
+  };
+
+  const totalActivo = prestamos.filter((p) => p.activo).reduce((s, p) => s + Number(p.saldo_pendiente), 0);
+  const cuotaActiva = prestamos.filter((p) => p.activo).reduce((s, p) => s + Number(p.cuota_quincena), 0);
+
+  return (
+    <div className="grid gap-4">
+      {totalActivo > 0 && (
+        <div className="grid grid-cols-2 gap-4">
+          <Card><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Saldo pendiente</p>
+            <p className="text-2xl font-display font-bold mt-1">{money(totalActivo)}</p></Card>
+          <Card><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Descuento por quincena</p>
+            <p className="text-2xl font-display font-bold mt-1">{money(cuotaActiva)}</p></Card>
+        </div>
+      )}
+      <Card>
+        <h2 className="font-semibold mb-3">Nuevo préstamo</h2>
+        <form onSubmit={crear} className="grid md:grid-cols-4 gap-2">
+          <input required type="number" step="0.01" min="0.01" placeholder="Monto total" className="input w-full"
+            value={form.monto_total} onChange={(e) => setForm({ ...form, monto_total: e.target.value })} />
+          <input required type="number" step="0.01" min="0.01" placeholder="Cuota por quincena" className="input w-full"
+            value={form.cuota_quincena} onChange={(e) => setForm({ ...form, cuota_quincena: e.target.value })} />
+          <input required type="date" className="input w-full"
+            value={form.fecha_inicio} onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} />
+          <button className="btn btn-primary">Registrar</button>
+          <input placeholder="Notas (opcional)" className="input w-full md:col-span-4"
+            value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+        </form>
+        <p className="text-xs text-slate-500 mt-2">
+          La fecha es la <strong>primera quincena de descuento</strong>.
+        </p>
+      </Card>
+
+      <Card className="p-0 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-3 text-right">Total</th>
+              <th className="p-3 text-right">Cuota</th>
+              <th className="p-3 text-right">Saldo</th>
+              <th className="p-3">1ra desc.</th>
+              <th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {prestamos.map((p) => (
+              <tr key={p.id} className={`border-b border-slate-200 hover:bg-slate-50 ${!p.activo && 'opacity-50'}`}>
+                <td className="p-3 text-right">{money(p.monto_total)}</td>
+                <td className="p-3 text-right whitespace-nowrap">
+                  {money(p.cuota_quincena)}
+                  {p.activo && (
+                    <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 align-middle" title="Editar cuota">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </td>
+                <td className="p-3 text-right font-semibold">{money(p.saldo_pendiente)}</td>
+                <td className="p-3 whitespace-nowrap">{fecha(p.fecha_inicio)}</td>
+                <td className="p-3 text-right whitespace-nowrap">
+                  {p.activo && (
+                    <>
+                      <button onClick={() => setModalAbono({ prestamo: p, montoInicial: '' })}
+                        className="btn btn-secondary !px-2.5 !py-1 text-xs">Abonar</button>
+                      <button onClick={() => setModalAbono({ prestamo: p, montoInicial: p.saldo_pendiente })}
+                        className="btn btn-secondary !px-2.5 !py-1 text-xs ml-1">Precancelar</button>
+                    </>
+                  )}
+                  {Number(p.saldo_pendiente) === Number(p.monto_total) && (
+                    <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 ml-2 align-middle" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {prestamos.length === 0 && <tr><td colSpan={5} className="p-4 text-slate-500">Sin préstamos registrados.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+
+      <AbonoModal prestamo={modalAbono?.prestamo} montoInicial={modalAbono?.montoInicial}
+        open={!!modalAbono} onClose={() => setModalAbono(null)} onGuardado={cargar} />
+      <CuotaModal prestamo={modalCuota} open={!!modalCuota} onClose={() => setModalCuota(null)} onGuardado={cargar} />
     </div>
   );
 }
@@ -445,6 +571,7 @@ export default function ColaboradorDetalle() {
       {tab === 'Ficha' && <FichaTab col={col} onGuardado={() => { setError(null); cargar(); }} onError={setError} />}
       {tab === 'Contratos' && <ContratosTab col={col} onCambio={() => { setError(null); cargar(); }} onError={setError} />}
       {tab === 'Descuentos' && <DescuentosTab col={col} onError={setError} />}
+      {tab === 'Préstamos' && <PrestamosTab col={col} onError={setError} />}
       {tab === 'Ausencias' && <AusenciasTab col={col} onError={setError} />}
       {tab === 'Documentos' && <DocumentosTab col={col} onError={setError} />}
       {tab === 'Evaluaciones' && <EvaluacionesTab col={col} onError={setError} />}

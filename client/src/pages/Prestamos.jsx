@@ -63,7 +63,7 @@ function DetalleAbonos({ prestamoId }) {
 
 // Modal único para abonar o precancelar: el monto siempre es editable; si
 // coincide con el saldo pendiente, avisa que dejará el préstamo en 0.
-function AbonoModal({ prestamo, montoInicial, open, onClose, onGuardado }) {
+export function AbonoModal({ prestamo, montoInicial, open, onClose, onGuardado }) {
   const [monto, setMonto] = useState('');
   const [notas, setNotas] = useState('');
   const toast = useToast();
@@ -110,7 +110,7 @@ function AbonoModal({ prestamo, montoInicial, open, onClose, onGuardado }) {
   );
 }
 
-function CuotaModal({ prestamo, open, onClose, onGuardado }) {
+export function CuotaModal({ prestamo, open, onClose, onGuardado }) {
   const [cuota, setCuota] = useState('');
   const toast = useToast();
 
