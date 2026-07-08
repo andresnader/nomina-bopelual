@@ -6,6 +6,7 @@ import Card from '../components/Card.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { money } from '../utils.js';
 import { useConfirm } from '../components/Modal.jsx';
+import { useToast } from '../components/Toast.jsx';
 
 export const QUINCENA_LABEL = { 0: 'Ambas', 1: '1ra quincena', 2: '2da quincena' };
 
@@ -62,17 +63,34 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
   );
 }
 
-export function TablaDescuentos({ descuentos, onCambio, onError, conColaborador = true }) {
+export function TablaDescuentos({ descuentos, onCambio, conColaborador = true }) {
+  const toast = useToast();
   const confirm = useConfirm();
 
   const alternar = async (d) => {
-    try { await api.patch(`/descuentos/${d.id}`, { activo: !d.activo }); onCambio(); }
-    catch (e) { onError(e.message); }
+    try {
+      await api.patch(`/descuentos/${d.id}`, { activo: !d.activo });
+      onCambio();
+    } catch (e) {
+      toast.error(e.message);
+    }
   };
+
   const eliminar = async (d) => {
-    if (!(await confirm({ title: 'Eliminar descuento', message: `¿Eliminar ${d.tipo_linea}?`, danger: true }))) return;
-    try { await api.del(`/descuentos/${d.id}`); onCambio(); }
-    catch (e) { onError(e.message); }
+    const ok = await confirm({
+      title: 'Eliminar descuento',
+      message: `¿Eliminar ${d.tipo_linea} de ${d.colaborador_nombre ?? 'este colaborador'}?`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/descuentos/${d.id}`);
+      toast.success('Descuento eliminado.');
+      onCambio();
+    } catch (e) {
+      toast.error(e.message);
+    }
   };
 
   return (
@@ -154,7 +172,7 @@ export default function Descuentos() {
           <h2 className="font-semibold">Todos los descuentos</h2>
           <span className="text-sm text-muted">{descuentos.filter((d) => d.activo).length} activos · {money(total)} por período completo</span>
         </div>
-        <TablaDescuentos descuentos={descuentos} onCambio={cargar} onError={setError} />
+        <TablaDescuentos descuentos={descuentos} onCambio={cargar} />
       </Card>
     </div>
   );

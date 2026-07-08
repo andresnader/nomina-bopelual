@@ -9,6 +9,7 @@ import { money, fecha } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
 import { useConfirm } from '../components/Modal.jsx';
+import { useToast } from '../components/Toast.jsx';
 
 const TABS = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
@@ -171,7 +172,7 @@ function DescuentosTab({ col, onError }) {
         <FormDescuento colaboradorId={col.id} onCreado={cargar} onError={onError} />
       </Card>
       <Card className="p-0 overflow-x-auto">
-        <TablaDescuentos descuentos={descuentos} onCambio={cargar} onError={onError} conColaborador={false} />
+        <TablaDescuentos descuentos={descuentos} onCambio={cargar} conColaborador={false} />
       </Card>
     </div>
   );
@@ -211,6 +212,7 @@ function AusenciasTab({ col, onError }) {
 function DocumentosTab({ col, onError }) {
   const [docs, setDocs] = useState([]);
   const [tipo, setTipo] = useState('CONTRATO');
+  const toast = useToast();
   const confirm = useConfirm();
   const cargar = () => api.get(`/colaboradores/${col.id}/documentos`).then(setDocs).catch((e) => onError(e.message));
   useEffect(() => { cargar(); }, [col.id]);
@@ -232,9 +234,20 @@ function DocumentosTab({ col, onError }) {
   };
 
   const eliminar = async (d) => {
-    if (!(await confirm({ title: 'Eliminar documento', message: `¿Eliminar ${d.nombre}?`, danger: true }))) return;
-    try { await api.del(`/colaboradores/${col.id}/documentos/${d.id}`); cargar(); }
-    catch (err) { onError(err.message); }
+    const ok = await confirm({
+      title: 'Eliminar documento',
+      message: `¿Eliminar ${d.nombre}?`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.del(`/colaboradores/${col.id}/documentos/${d.id}`);
+      toast.success('Documento eliminado.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   return (

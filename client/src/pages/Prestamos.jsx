@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import KpiCard from '../components/KpiCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
+import { Modal, useConfirm } from '../components/Modal.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
 
 const VACIO = { colaborador_id: '', monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '' };
@@ -59,6 +61,90 @@ function DetalleAbonos({ prestamoId }) {
   );
 }
 
+// Modal único para abonar o precancelar: el monto siempre es editable; si
+// coincide con el saldo pendiente, avisa que dejará el préstamo en 0.
+function AbonoModal({ prestamo, montoInicial, open, onClose, onGuardado }) {
+  const [monto, setMonto] = useState('');
+  const [notas, setNotas] = useState('');
+  const toast = useToast();
+
+  useEffect(() => {
+    if (open) { setMonto(String(montoInicial ?? '')); setNotas(''); }
+  }, [open, montoInicial]);
+
+  if (!prestamo) return null;
+  const saldo = Number(prestamo.saldo_pendiente);
+  const precancela = Number(monto) > 0 && Math.abs(Number(monto) - saldo) < 0.005;
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/prestamos/${prestamo.id}/abonos`, { monto: Number(monto), notas: notas || undefined });
+      toast.success(precancela ? 'Préstamo precancelado.' : 'Abono registrado.');
+      onGuardado();
+      onClose();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Registrar abono — ${prestamo.colaborador_nombre}`} size="sm"
+      footer={<button type="submit" form="form-abono" className="btn btn-primary">Registrar</button>}>
+      <form id="form-abono" onSubmit={guardar} className="grid gap-3">
+        <p className="text-sm text-slate-500">Saldo pendiente: <span className="font-semibold text-slate-700">{money(saldo)}</span></p>
+        <label className="text-sm text-slate-600">Monto del abono
+          <input required autoFocus type="number" step="0.01" min="0.01" max={saldo} className="input w-full mt-1"
+            value={monto} onChange={(e) => setMonto(e.target.value)} />
+        </label>
+        {precancela && (
+          <p className="text-sm text-gold-700 bg-gold-50 border border-gold-200 rounded-lg px-3 py-2">
+            Esto precancelará el préstamo: el saldo quedará en $0.00 y dejará de descontarse.
+          </p>
+        )}
+        <label className="text-sm text-slate-600">Notas (opcional)
+          <input className="input w-full mt-1" value={notas} onChange={(e) => setNotas(e.target.value)} />
+        </label>
+      </form>
+    </Modal>
+  );
+}
+
+function CuotaModal({ prestamo, open, onClose, onGuardado }) {
+  const [cuota, setCuota] = useState('');
+  const toast = useToast();
+
+  useEffect(() => {
+    if (open) setCuota(String(prestamo?.cuota_quincena ?? ''));
+  }, [open, prestamo]);
+
+  if (!prestamo) return null;
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/prestamos/${prestamo.id}`, { cuota_quincena: Number(cuota) });
+      toast.success('Cuota actualizada.');
+      onGuardado();
+      onClose();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Editar cuota — ${prestamo.colaborador_nombre}`} size="sm"
+      footer={<button type="submit" form="form-cuota" className="btn btn-primary">Guardar</button>}>
+      <form id="form-cuota" onSubmit={guardar}>
+        <label className="text-sm text-slate-600">Cuota por quincena
+          <input required autoFocus type="number" step="0.01" min="0.01" className="input w-full mt-1"
+            value={cuota} onChange={(e) => setCuota(e.target.value)} />
+        </label>
+      </form>
+    </Modal>
+  );
+}
+
 export default function Prestamos() {
   const [respuesta, setRespuesta] = useState({ data: [], total: 0, page: 1, per_page: 10, resumen: {} });
   const [colaboradores, setColaboradores] = useState([]);
@@ -67,13 +153,16 @@ export default function Prestamos() {
   const [filtroActivo, setFiltroActivo] = useState('true');
   const [pagina, setPagina] = useState(1);
   const [expandido, setExpandido] = useState(null);
-  const [error, setError] = useState(null);
+  const [modalAbono, setModalAbono] = useState(null); // { prestamo, montoInicial }
+  const [modalCuota, setModalCuota] = useState(null); // prestamo
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const cargar = () => {
     const params = new URLSearchParams({ page: pagina, per_page: 10 });
     if (q) params.set('q', q);
     if (filtroActivo) params.set('activo', filtroActivo);
-    api.get(`/prestamos?${params}`).then(setRespuesta).catch((e) => setError(e.message));
+    api.get(`/prestamos?${params}`).then(setRespuesta).catch((e) => toast.error(e.message));
   };
 
   useEffect(() => { cargar(); }, [q, filtroActivo, pagina]);
@@ -81,39 +170,33 @@ export default function Prestamos() {
     api.get('/colaboradores?activo=true&per_page=all').then((r) => setColaboradores(r.data)).catch(() => {});
   }, []);
 
-  const accion = async (fn) => {
-    setError(null);
-    try { await fn(); cargar(); } catch (e) { setError(e.message); }
-  };
-
-  const crear = (e) => {
+  const crear = async (e) => {
     e.preventDefault();
-    accion(async () => {
+    try {
       await api.post('/prestamos', { ...form, monto_total: Number(form.monto_total), cuota_quincena: Number(form.cuota_quincena) });
       setForm(VACIO);
+      toast.success('Préstamo registrado.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const eliminar = async (p) => {
+    const ok = await confirm({
+      title: 'Eliminar préstamo',
+      message: `¿Eliminar el préstamo de ${p.colaborador_nombre}? Solo es posible si no tiene pagos aplicados.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
     });
-  };
-
-  const abonar = (p) => {
-    const valor = prompt(`Monto del abono para ${p.colaborador_nombre} (saldo: ${money(p.saldo_pendiente)})`, p.saldo_pendiente);
-    if (valor == null) return;
-    accion(() => api.post(`/prestamos/${p.id}/abonos`, { monto: Number(valor) }));
-  };
-
-  const precancelar = (p) => {
-    if (!confirm(`¿Precancelar el préstamo de ${p.colaborador_nombre} por ${money(p.saldo_pendiente)}? El saldo quedará en 0 y dejará de descontarse.`)) return;
-    accion(() => api.post(`/prestamos/${p.id}/abonos`, {}));
-  };
-
-  const editarCuota = (p) => {
-    const valor = prompt(`Nueva cuota por quincena (actual: ${money(p.cuota_quincena)})`, p.cuota_quincena);
-    if (valor == null) return;
-    accion(() => api.patch(`/prestamos/${p.id}`, { cuota_quincena: Number(valor) }));
-  };
-
-  const eliminar = (p) => {
-    if (!confirm(`¿Eliminar el préstamo de ${p.colaborador_nombre}? Solo es posible si no tiene pagos aplicados.`)) return;
-    accion(() => api.del(`/prestamos/${p.id}`));
+    if (!ok) return;
+    try {
+      await api.del(`/prestamos/${p.id}`);
+      toast.success('Préstamo eliminado.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   const { data, total, per_page, resumen } = respuesta;
@@ -123,7 +206,6 @@ export default function Prestamos() {
   return (
     <div className="animate-fade-in">
       <PageTitle>Préstamos</PageTitle>
-      {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <div className="grid grid-cols-3 gap-4 mb-4">
         <KpiCard titulo="Préstamos activos" valor={resumen.activos ?? '—'} />
@@ -149,6 +231,10 @@ export default function Prestamos() {
           <input placeholder="Notas (opcional)" value={form.notas}
             onChange={(e) => setForm({ ...form, notas: e.target.value })} className="input w-full md:col-span-5" />
         </form>
+        <p className="text-xs text-slate-500 mt-2">
+          La fecha es la <strong>primera quincena de descuento</strong>: el préstamo empezará a descontarse recién en el
+          período que la incluya, no antes.
+        </p>
       </Card>
 
       <Card className="p-0 overflow-x-auto">
@@ -173,14 +259,14 @@ export default function Prestamos() {
               <th className="p-3 text-right">Cuota</th>
               <th className="p-3 w-44">Progreso</th>
               <th className="p-3 text-right">Saldo</th>
-              <th className="p-3">Desde</th>
+              <th className="p-3">1ra quincena desc.</th>
               <th className="p-3 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {data.map((p) => (
-              <>
-                <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50">
+              <Fragment key={p.id}>
+                <tr className="border-b border-slate-200 hover:bg-slate-50">
                   <td className="p-3">
                     <Link to={`/colaboradores/${p.colaborador_id}`} className="text-gold-600 font-medium hover:underline">
                       {p.colaborador_nombre}
@@ -191,7 +277,7 @@ export default function Prestamos() {
                   <td className="p-3 text-right whitespace-nowrap">
                     {money(p.cuota_quincena)}
                     {p.activo && (
-                      <button onClick={() => editarCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 align-middle" title="Editar cuota">
+                      <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 align-middle" title="Editar cuota">
                         <Pencil size={13} />
                       </button>
                     )}
@@ -202,8 +288,8 @@ export default function Prestamos() {
                   <td className="p-3 text-right whitespace-nowrap">
                     {p.activo && (
                       <>
-                        <button onClick={() => abonar(p)} className="btn btn-secondary !px-2.5 !py-1 text-xs">Abonar</button>
-                        <button onClick={() => precancelar(p)} className="btn btn-secondary !px-2.5 !py-1 text-xs ml-1">Precancelar</button>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: '' })} className="btn btn-secondary !px-2.5 !py-1 text-xs">Abonar</button>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: p.saldo_pendiente })} className="btn btn-secondary !px-2.5 !py-1 text-xs ml-1">Precancelar</button>
                       </>
                     )}
                     {sinPagos(p) && (
@@ -218,11 +304,11 @@ export default function Prestamos() {
                   </td>
                 </tr>
                 {expandido === p.id && (
-                  <tr key={`${p.id}-det`} className="border-b border-slate-200">
+                  <tr className="border-b border-slate-200">
                     <td colSpan={7} className="px-3 pb-3"><DetalleAbonos prestamoId={p.id} /></td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
             {data.length === 0 && (
               <tr><td colSpan={7} className="p-4 text-slate-500">Sin préstamos con este filtro.</td></tr>
@@ -241,6 +327,10 @@ export default function Prestamos() {
           </div>
         </div>
       </Card>
+
+      <AbonoModal prestamo={modalAbono?.prestamo} montoInicial={modalAbono?.montoInicial}
+        open={!!modalAbono} onClose={() => setModalAbono(null)} onGuardado={cargar} />
+      <CuotaModal prestamo={modalCuota} open={!!modalCuota} onClose={() => setModalCuota(null)} onGuardado={cargar} />
     </div>
   );
 }
