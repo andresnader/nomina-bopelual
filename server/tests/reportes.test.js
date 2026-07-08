@@ -84,4 +84,63 @@ describe('reportes', () => {
     expect(res.status).toBe(200);
     expect(res.body.some((c) => c.id === sinDoc.id)).toBe(true);
   });
+
+  it('evolución mensual agrega ingresos/descuentos/neto por período', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `Evol ${Date.now()}`, cedula: `EV${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    await auth(request(app).post('/api/periodos')).send({
+      nombre: `evol test ${Date.now()}`, fecha_inicio: '2027-01-16', fecha_fin: '2027-01-31', quincena: 2
+    });
+    const res = await auth(request(app).get('/api/reportes/evolucion-mensual'));
+    expect(res.status).toBe(200);
+    const fila = res.body.find((r) => r.nombre.includes('evol test'));
+    expect(Number(fila.neto)).toBeGreaterThan(0);
+  });
+
+  it('retenciones por proveedor agrupa por mes', async () => {
+    const app = createApp();
+    const prov = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'EXTERNO', nombre: `RetProv ${Date.now()}`, cedula: `RP${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post('/api/facturas')).send({
+      colaborador_id: prov.id, fecha_factura: '2026-07-05', monto_bruto: 1000
+    });
+    const res = await auth(request(app).get('/api/reportes/retenciones-proveedor'));
+    const fila = res.body.find((r) => r.proveedor.includes('RetProv'));
+    expect(Number(fila.total_retencion)).toBe(100);
+  });
+
+  it('provisiones filtra por año', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `Provis ${Date.now()}`, cedula: `PV2${Date.now() % 1e8}`
+    })).body;
+    await pool.query(
+      `INSERT INTO provisiones (colaborador_id, anio, decimo_tercero) VALUES ($1, 2099, 50)`,
+      [col.id]
+    );
+    const res = await auth(request(app).get('/api/reportes/provisiones?anio=2099'));
+    expect(res.body.some((r) => r.colaborador.includes('Provis') && Number(r.decimo_tercero) === 50)).toBe(true);
+  });
+
+  it('costo por departamento con periodo_id devuelve montos reales del período', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `CostoDept ${Date.now()}`, cedula: `CD${Date.now() % 1e8}`, departamento: 'PRUEBAS'
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `costo dept ${Date.now()}`, fecha_inicio: '2027-02-16', fecha_fin: '2027-02-28', quincena: 2
+    });
+    const res = await auth(request(app).get(`/api/reportes/costo-departamento?periodo_id=${per.body.periodo.id}`));
+    const fila = res.body.find((r) => r.departamento === 'PRUEBAS');
+    expect(Number(fila.neto)).toBeGreaterThan(0);
+  });
 });
