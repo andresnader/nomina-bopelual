@@ -8,6 +8,7 @@ import PageTitle from '../components/PageTitle.jsx';
 import { money, fecha } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
+import { useConfirm } from '../components/Modal.jsx';
 
 const TABS = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
@@ -210,6 +211,7 @@ function AusenciasTab({ col, onError }) {
 function DocumentosTab({ col, onError }) {
   const [docs, setDocs] = useState([]);
   const [tipo, setTipo] = useState('CONTRATO');
+  const confirm = useConfirm();
   const cargar = () => api.get(`/colaboradores/${col.id}/documentos`).then(setDocs).catch((e) => onError(e.message));
   useEffect(() => { cargar(); }, [col.id]);
 
@@ -230,7 +232,7 @@ function DocumentosTab({ col, onError }) {
   };
 
   const eliminar = async (d) => {
-    if (!confirm(`¿Eliminar ${d.nombre}?`)) return;
+    if (!(await confirm({ title: 'Eliminar documento', message: `¿Eliminar ${d.nombre}?`, danger: true }))) return;
     try { await api.del(`/colaboradores/${col.id}/documentos/${d.id}`); cargar(); }
     catch (err) { onError(err.message); }
   };

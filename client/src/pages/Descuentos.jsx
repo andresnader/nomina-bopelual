@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { money } from '../utils.js';
+import { useConfirm } from '../components/Modal.jsx';
 
 export const QUINCENA_LABEL = { 0: 'Ambas', 1: '1ra quincena', 2: '2da quincena' };
 
@@ -62,12 +63,14 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
 }
 
 export function TablaDescuentos({ descuentos, onCambio, onError, conColaborador = true }) {
+  const confirm = useConfirm();
+
   const alternar = async (d) => {
     try { await api.patch(`/descuentos/${d.id}`, { activo: !d.activo }); onCambio(); }
     catch (e) { onError(e.message); }
   };
   const eliminar = async (d) => {
-    if (!confirm(`¿Eliminar ${d.tipo_linea} de ${d.colaborador_nombre ?? 'este colaborador'}?`)) return;
+    if (!(await confirm({ title: 'Eliminar descuento', message: `¿Eliminar ${d.tipo_linea}?`, danger: true }))) return;
     try { await api.del(`/descuentos/${d.id}`); onCambio(); }
     catch (e) { onError(e.message); }
   };
