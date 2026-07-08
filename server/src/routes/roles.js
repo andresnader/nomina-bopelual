@@ -3,6 +3,7 @@ import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
 import { puedeEditarLineas } from '../lib/periodo-fsm.js';
 import { recalcularTotales } from '../services/roles.js';
+import { aplicarPrestamosPendientes, aplicarDescuentosPendientes } from '../services/periodos.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -78,6 +79,38 @@ router.delete('/:rolId/lineas/:lineaId', requireRole(['ADMIN', 'RRHH']), async (
     const totales = await recalcularTotales(client, req.params.rolId);
     await client.query('COMMIT');
     res.json(totales);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+// Aplica al rol los préstamos/descuentos recurrentes creados DESPUÉS de
+// haber generado el período, sin duplicar los que ya tenga. Solo mientras
+// el período esté en BORRADOR (mismo criterio que editar líneas a mano).
+router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT rp.colaborador_id, p.estado, p.fecha_fin, p.quincena
+       FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id WHERE rp.id=$1 FOR UPDATE`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'rol no encontrado' });
+    }
+    if (!puedeEditarLineas(rows[0].estado)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `período ${rows[0].estado}: no editable` });
+    }
+    const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
+    const agregadosDescuentos = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena);
+    const totales = await recalcularTotales(client, req.params.id);
+    await client.query('COMMIT');
+    res.json({ ...totales, agregadas: agregadosPrestamos + agregadosDescuentos });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
