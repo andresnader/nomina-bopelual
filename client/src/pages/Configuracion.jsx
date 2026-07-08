@@ -7,6 +7,95 @@ import { money } from '../utils.js';
 
 const VACIO = { email: '', nombre: '', rol: 'COLABORADOR', colaborador_id: '' };
 
+// Catálogo de instituciones financieras para el TXT Cash Management Pichincha.
+function ConfiguracionBancos({ onError }) {
+  const [bancos, setBancos] = useState([]);
+  const [q, setQ] = useState('');
+  const [form, setForm] = useState({ codigo: '', nombre: '' });
+
+  const cargar = () => api.get('/bancos/todos').then(setBancos).catch((e) => onError(e.message));
+  useEffect(() => { cargar(); }, []);
+
+  const crear = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/bancos', form);
+      setForm({ codigo: '', nombre: '' });
+      cargar();
+    } catch (err) {
+      onError(err.message);
+    }
+  };
+
+  const renombrar = async (b) => {
+    const nombre = prompt(`Nuevo nombre para el código ${b.codigo}`, b.nombre);
+    if (!nombre || nombre === b.nombre) return;
+    try { await api.patch(`/bancos/${b.codigo}`, { nombre }); cargar(); }
+    catch (err) { onError(err.message); }
+  };
+
+  const alternar = async (b) => {
+    try { await api.patch(`/bancos/${b.codigo}`, { activo: !b.activo }); cargar(); }
+    catch (err) { onError(err.message); }
+  };
+
+  const filtrados = bancos.filter(
+    (b) => !q || b.nombre.toLowerCase().includes(q.toLowerCase()) || b.codigo.includes(q)
+  );
+
+  return (
+    <Card className="mb-4">
+      <h2 className="font-display font-bold mb-1">Configuración de bancos</h2>
+      <p className="text-sm text-muted mb-3">
+        Códigos de instituciones financieras para el archivo de pago masivo (catálogo Cash Management Pichincha, {bancos.length} instituciones).
+        Los inactivos no aparecen al asignar banco en la ficha del colaborador.
+      </p>
+
+      <form onSubmit={crear} className="grid md:grid-cols-4 gap-2 mb-3">
+        <input required placeholder="Código (ej. 10)" className="input w-full" value={form.codigo}
+          onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+        <input required placeholder="Nombre de la institución" className="input w-full md:col-span-2" value={form.nombre}
+          onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+        <button className="btn btn-primary">Agregar banco</button>
+      </form>
+
+      <input placeholder="Buscar por nombre o código…" className="input w-full mb-2"
+        value={q} onChange={(e) => setQ(e.target.value)} />
+
+      <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left sticky top-0 bg-white">
+            <tr className="border-b border-slate-200">
+              <th className="p-2 w-20">Código</th>
+              <th className="p-2">Institución</th>
+              <th className="p-2 w-28">Estado</th>
+              <th className="p-2 w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtrados.map((b) => (
+              <tr key={b.codigo} className={`border-b border-slate-100 ${!b.activo && 'opacity-50'}`}>
+                <td className="p-2 font-mono">{b.codigo}</td>
+                <td className="p-2">{b.nombre}</td>
+                <td className="p-2">
+                  <button onClick={() => alternar(b)}
+                    className={b.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                    {b.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </button>
+                </td>
+                <td className="p-2">
+                  <button onClick={() => renombrar(b)} className="text-gold-600 text-xs hover:underline">Editar</button>
+                </td>
+              </tr>
+            ))}
+            {filtrados.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin resultados.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 export default function Configuracion() {
   const [usuarios, setUsuarios] = useState([]);
   const [colaboradores, setColaboradores] = useState([]);
@@ -93,6 +182,8 @@ export default function Configuracion() {
           </button>
         </form>
       </Card>
+
+      <ConfiguracionBancos onError={setError} />
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">

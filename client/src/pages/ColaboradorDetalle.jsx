@@ -10,10 +10,12 @@ import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
 
 const TABS = ['Ficha', 'Contratos', 'Descuentos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
-const BANCOS = ['BANCO PICHINCHA', 'BANCO GUAYAQUIL', 'BANCO DEL PACIFICO', 'BANCO PRODUBANCO', 'BANCO BOLIVARIANO'];
-const CODIGO_BANCO = { 'BANCO PICHINCHA': '10', 'BANCO GUAYAQUIL': '17', 'BANCO DEL PACIFICO': '30', 'BANCO PRODUBANCO': '36', 'BANCO BOLIVARIANO': '37' };
 
 function FichaTab({ col, onGuardado, onError }) {
+  const [bancos, setBancos] = useState([]);
+  useEffect(() => {
+    api.get('/bancos').then(setBancos).catch(() => {});
+  }, []);
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
     departamento: col.departamento ?? '', cargo: col.cargo ?? '', fecha_ingreso: col.fecha_ingreso?.slice(0, 10) ?? '',
@@ -79,14 +81,16 @@ function FichaTab({ col, onGuardado, onError }) {
         <h2 className="font-semibold mb-1">Datos bancarios</h2>
         <p className="text-sm text-muted mb-3">Necesarios para incluirlo en el TXT de pago masivo del banco.</p>
         <div className="grid md:grid-cols-4 gap-3">
-          <label className="text-sm text-slate-600">Banco
-            <select className="input w-full" value={form.banco}
-              onChange={(e) => setForm({ ...form, banco: e.target.value, codigo_banco: CODIGO_BANCO[e.target.value] ?? form.codigo_banco })}>
+          <label className="text-sm text-slate-600">Banco (catálogo Pichincha)
+            <select className="input w-full" value={form.codigo_banco}
+              onChange={(e) => {
+                const b = bancos.find((x) => x.codigo === e.target.value);
+                setForm({ ...form, codigo_banco: e.target.value, banco: b?.nombre ?? '' });
+              }}>
               <option value="">—</option>
-              {BANCOS.map((b) => <option key={b}>{b}</option>)}
+              {bancos.map((b) => <option key={b.codigo} value={b.codigo}>{b.codigo} — {b.nombre}</option>)}
             </select>
           </label>
-          <label className="text-sm text-slate-600">Código banco {campo('codigo_banco', { placeholder: 'ej. 10' })}</label>
           <label className="text-sm text-slate-600">Tipo de cuenta
             <select className="input w-full" value={form.tipo_cuenta} onChange={(e) => setForm({ ...form, tipo_cuenta: e.target.value })}>
               <option>AHORRO</option>
