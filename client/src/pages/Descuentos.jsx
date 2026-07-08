@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import PageTitle from '../components/PageTitle.jsx';
+import { Modal } from '../components/Modal.jsx';
 import { money } from '../utils.js';
 import { useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -66,6 +67,12 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
 export function TablaDescuentos({ descuentos, onCambio, conColaborador = true }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const [editando, setEditando] = useState(null);
+  const [tipos, setTipos] = useState([]);
+
+  useEffect(() => {
+    api.get('/descuentos/tipos').then(setTipos).catch(() => {});
+  }, []);
 
   const alternar = async (d) => {
     try {
@@ -93,51 +100,116 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
     }
   };
 
+  const guardarEdicion = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/descuentos/${editando.id}`, {
+        tipo_linea: editando.tipo_linea,
+        monto: Number(editando.monto),
+        aplicar_en: Number(editando.aplicar_en),
+        cuotas_restantes: editando.cuotas_restantes === '' ? null : Number(editando.cuotas_restantes),
+        notas: editando.notas || null,
+        activo: editando.activo,
+      });
+      toast.success('Descuento actualizado.');
+      setEditando(null);
+      onCambio();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   return (
-    <table className="w-full text-sm">
-      <thead className="text-slate-500 text-left">
-        <tr className="border-b border-slate-200">
-          {conColaborador && <th className="p-3">Colaborador</th>}
-          <th className="p-3">Concepto</th>
-          <th className="p-3 text-right">Monto</th>
-          <th className="p-3">Aplica en</th>
-          <th className="p-3 text-right">Cuotas rest.</th>
-          <th className="p-3">Estado</th>
-          <th className="p-3"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {descuentos.map((d) => (
-          <tr key={d.id} className={`border-b border-slate-200 hover:bg-slate-50 ${!d.activo && 'opacity-50'}`}>
-            {conColaborador && (
-              <td className="p-3">
-                <Link to={`/colaboradores/${d.colaborador_id}`} className="text-gold-600 font-medium hover:underline">
-                  {d.colaborador_nombre}
-                </Link>
-              </td>
-            )}
-            <td className="p-3">{d.tipo_linea}{d.notas && <span className="text-slate-400"> — {d.notas}</span>}</td>
-            <td className="p-3 text-right font-medium">{money(d.monto)}</td>
-            <td className="p-3">{QUINCENA_LABEL[d.aplicar_en]}</td>
-            <td className="p-3 text-right">{d.cuotas_restantes ?? '∞'}</td>
-            <td className="p-3">
-              <button onClick={() => alternar(d)}
-                className={d.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
-                {d.activo ? 'ACTIVO' : 'INACTIVO'}
-              </button>
-            </td>
-            <td className="p-3 text-right">
-              <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600" title="Eliminar">
-                <Trash2 size={15} />
-              </button>
-            </td>
+    <>
+      <table className="w-full text-sm">
+        <thead className="text-slate-500 text-left">
+          <tr className="border-b border-slate-200">
+            {conColaborador && <th className="p-3">Colaborador</th>}
+            <th className="p-3">Concepto</th>
+            <th className="p-3 text-right">Monto</th>
+            <th className="p-3">Aplica en</th>
+            <th className="p-3 text-right">Cuotas rest.</th>
+            <th className="p-3">Estado</th>
+            <th className="p-3"></th>
           </tr>
-        ))}
-        {descuentos.length === 0 && (
-          <tr><td colSpan={7} className="p-4 text-slate-500">Sin descuentos registrados.</td></tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {descuentos.map((d) => (
+            <tr key={d.id} className={`border-b border-slate-200 hover:bg-slate-50 ${!d.activo && 'opacity-50'}`}>
+              {conColaborador && (
+                <td className="p-3">
+                  <Link to={`/colaboradores/${d.colaborador_id}`} className="text-gold-600 font-medium hover:underline">
+                    {d.colaborador_nombre}
+                  </Link>
+                </td>
+              )}
+              <td className="p-3">{d.tipo_linea}{d.notas && <span className="text-slate-400"> — {d.notas}</span>}</td>
+              <td className="p-3 text-right font-medium">{money(d.monto)}</td>
+              <td className="p-3">{QUINCENA_LABEL[d.aplicar_en]}</td>
+              <td className="p-3 text-right">{d.cuotas_restantes ?? '∞'}</td>
+              <td className="p-3">
+                <button onClick={() => alternar(d)}
+                  className={d.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                  {d.activo ? 'ACTIVO' : 'INACTIVO'}
+                </button>
+              </td>
+              <td className="p-3 text-right whitespace-nowrap">
+                <button onClick={() => setEditando({ ...d, monto: String(d.monto), cuotas_restantes: d.cuotas_restantes ?? '' })}
+                  className="text-slate-400 hover:text-gold-600 p-1.5" title="Editar">
+                  <Pencil size={15} />
+                </button>
+                <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-1.5" title="Eliminar">
+                  <Trash2 size={15} />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {descuentos.length === 0 && (
+            <tr><td colSpan={7} className="p-4 text-slate-500">Sin descuentos registrados.</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      <Modal open={!!editando} onClose={() => setEditando(null)}
+        title={`Editar descuento — ${editando?.tipo_linea ?? ''}`} size="md"
+        footer={<button type="submit" form="form-editar-descuento" className="btn btn-primary">Guardar cambios</button>}>
+        <form id="form-editar-descuento" onSubmit={guardarEdicion} className="grid gap-3">
+          <label className="text-sm text-slate-600">Concepto
+            <select className="input w-full mt-1" value={editando?.tipo_linea ?? ''}
+              onChange={(e) => setEditando({ ...editando, tipo_linea: e.target.value })}>
+              {tipos.map((t) => <option key={t.tipo} value={t.tipo}>{t.label}</option>)}
+            </select>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-sm text-slate-600">Monto
+              <input required type="number" step="0.01" min="0.01" className="input w-full mt-1"
+                value={editando?.monto ?? ''}
+                onChange={(e) => setEditando({ ...editando, monto: e.target.value })} />
+            </label>
+            <label className="text-sm text-slate-600">Cuotas restantes (opcional)
+              <input type="number" min="1" className="input w-full mt-1"
+                value={editando?.cuotas_restantes ?? ''}
+                onChange={(e) => setEditando({ ...editando, cuotas_restantes: e.target.value })} />
+            </label>
+          </div>
+          <label className="text-sm text-slate-600">Aplica en
+            <select className="input w-full mt-1" value={editando?.aplicar_en ?? 0}
+              onChange={(e) => setEditando({ ...editando, aplicar_en: e.target.value })}>
+              {Object.entries(QUINCENA_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">Notas
+            <input className="input w-full mt-1" value={editando?.notas ?? ''}
+              onChange={(e) => setEditando({ ...editando, notas: e.target.value })} />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" checked={editando?.activo ?? true}
+              onChange={(e) => setEditando({ ...editando, activo: e.target.checked })} />
+            Descuento activo
+          </label>
+        </form>
+      </Modal>
+    </>
   );
 }
 

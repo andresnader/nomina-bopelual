@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
 });
 
 router.patch('/:id', async (req, res) => {
-  const campos = ['monto', 'aplicar_en', 'cuotas_restantes', 'activo', 'notas'];
+  const campos = ['tipo_linea', 'monto', 'aplicar_en', 'cuotas_restantes', 'activo', 'notas'];
   const set = [];
   const params = [];
   for (const c of campos) {
