@@ -20,6 +20,64 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
   );
 }
 
+// Aplica al rol las cuotas de préstamos activos que aún no tenga (por
+// prestamo_id), respetando que ya deba haber empezado a descontarse.
+// Reutilizable desde generarRoles y desde /roles/:id/sincronizar.
+export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, periodoFechaFin) {
+  const { rows: prestamos } = await client.query(
+    `SELECT p.* FROM prestamos p
+     WHERE p.colaborador_id=$1 AND p.activo=true AND p.fecha_inicio <= $2
+       AND NOT EXISTS (
+         SELECT 1 FROM lineas_rol l WHERE l.rol_pago_id=$3 AND l.prestamo_id=p.id
+       )`,
+    [colaboradorId, periodoFechaFin, rolId]
+  );
+  let agregadas = 0;
+  for (const pr of prestamos) {
+    const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
+    if (r.aplicada > 0) {
+      await client.query(
+        `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, prestamo_id)
+         VALUES ($1,'CUOTA_PRESTAMO','DESCUENTO',$2,'Cuota de préstamo',false,$3)`,
+        [rolId, r.aplicada, pr.id]
+      );
+      await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
+        r.saldoNuevo, r.activo, pr.id
+      ]);
+      agregadas++;
+    }
+  }
+  return agregadas;
+}
+
+// Aplica al rol los descuentos recurrentes activos que aún no tenga (por
+// descuento_recurrente_id) y que correspondan a esta quincena.
+export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, quincena) {
+  const { rows: descuentos } = await client.query(
+    `SELECT d.* FROM descuentos_recurrentes d
+     WHERE d.colaborador_id=$1 AND d.activo=true AND d.aplicar_en IN (0,$2)
+       AND NOT EXISTS (
+         SELECT 1 FROM lineas_rol l WHERE l.rol_pago_id=$3 AND l.descuento_recurrente_id=d.id
+       )`,
+    [colaboradorId, quincena, rolId]
+  );
+  for (const d of descuentos) {
+    await client.query(
+      `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, descuento_recurrente_id)
+       VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
+      [rolId, d.tipo_linea, Number(d.monto), d.notas, d.id]
+    );
+    if (d.cuotas_restantes != null) {
+      const restantes = d.cuotas_restantes - 1;
+      await client.query(
+        'UPDATE descuentos_recurrentes SET cuotas_restantes=$1, activo=$2 WHERE id=$3',
+        [restantes, restantes > 0, d.id]
+      );
+    }
+  }
+  return descuentos.length;
+}
+
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
 // La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
 export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }) {
@@ -80,43 +138,8 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
       }
     }
 
-    // Préstamos activos → cuota de amortización.
-    const { rows: prestamos } = await client.query(
-      'SELECT * FROM prestamos WHERE colaborador_id=$1 AND activo=true AND fecha_inicio <= $2',
-      [col.id, periodoRows[0].fecha_fin]
-    );
-    for (const pr of prestamos) {
-      const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
-      if (r.aplicada > 0) {
-        await insertarLinea(client, rolId, {
-          tipo: 'CUOTA_PRESTAMO', clase: 'DESCUENTO', monto: r.aplicada, desc: 'Cuota de préstamo'
-        });
-        await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
-          r.saldoNuevo, r.activo, pr.id
-        ]);
-      }
-    }
-
-    // Descuentos recurrentes → se aplican según la quincena configurada
-    // (aplicar_en: 0=ambas, 1=solo primera, 2=solo segunda). Con cuotas
-    // definidas se decrementan y el descuento se desactiva al llegar a 0.
-    const { rows: descuentos } = await client.query(
-      `SELECT * FROM descuentos_recurrentes
-       WHERE colaborador_id=$1 AND activo=true AND aplicar_en IN (0,$2)`,
-      [col.id, quincena]
-    );
-    for (const d of descuentos) {
-      await insertarLinea(client, rolId, {
-        tipo: d.tipo_linea, clase: 'DESCUENTO', monto: Number(d.monto), desc: d.notas
-      });
-      if (d.cuotas_restantes != null) {
-        const restantes = d.cuotas_restantes - 1;
-        await client.query(
-          'UPDATE descuentos_recurrentes SET cuotas_restantes=$1, activo=$2 WHERE id=$3',
-          [restantes, restantes > 0, d.id]
-        );
-      }
-    }
+    await aplicarPrestamosPendientes(client, rolId, col.id, periodoRows[0].fecha_fin);
+    await aplicarDescuentosPendientes(client, rolId, col.id, quincena);
 
     await recalcularTotales(client, rolId);
     creados++;
