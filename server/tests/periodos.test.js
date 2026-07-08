@@ -93,7 +93,10 @@ describe('servicio de períodos', () => {
       await client.query(`INSERT INTO prestamos (colaborador_id, monto_total, saldo_pendiente, cuota_quincena, fecha_inicio) VALUES ($1, 100, 100, 10, '2026-08-01')`, [colaboradorId]);
       const p = await crearPeriodo(client, { nombre: '2da julio', fecha_inicio: '2026-07-16', fecha_fin: '2026-07-31', quincena: 2, creado_por: usuarioId });
       await generarRoles(client, p.id, { sbu: 460 });
-      const { rows } = await client.query(`SELECT 1 FROM lineas_rol l JOIN roles_pago rp ON rp.id=l.rol_pago_id WHERE rp.periodo_id=$1 AND l.tipo_linea='CUOTA_PRESTAMO'`, [p.id]);
+      const { rows } = await client.query(
+        `SELECT 1 FROM lineas_rol l JOIN roles_pago rp ON rp.id=l.rol_pago_id WHERE rp.periodo_id=$1 AND rp.colaborador_id=$2 AND l.tipo_linea='CUOTA_PRESTAMO'`, 
+        [p.id, colaboradorId]
+      );
       expect(rows.length).toBe(0);
     });
   });

@@ -25,8 +25,8 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
 // Reutilizable desde generarRoles y desde /roles/:id/sincronizar.
 export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, periodoFechaFin) {
   const { rows: prestamos } = await client.query(
-    `SELECT p.* FROM prestamos p
-     WHERE p.colaborador_id=$1 AND p.activo=true AND p.fecha_inicio <= $2
+      `SELECT p.* FROM prestamos p
+     WHERE p.colaborador_id=$1 AND p.activo=true AND p.fecha_inicio <= $2::date
        AND NOT EXISTS (
          SELECT 1 FROM lineas_rol l WHERE l.rol_pago_id=$3 AND l.prestamo_id=p.id
        )`,

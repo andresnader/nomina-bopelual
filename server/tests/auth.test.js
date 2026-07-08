@@ -26,6 +26,7 @@ describe('auth', () => {
 
   it('401 con token inválido', async () => {
     const res = await request(createApp()).get('/api/auth/me').set('Authorization', 'Bearer malo');
+    console.log('RES PARA MALO:', res.status, res.body);
     expect(res.status).toBe(401);
   });
 
