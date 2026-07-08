@@ -52,6 +52,22 @@ describe('colaboradores', () => {
     expect(rows[0].activos).toBe(1);
   });
 
+  it('POST contratos acepta tipo_contrato', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `Tipo contrato ${Date.now()}`, cedula: `TC${Date.now() % 1e8}`
+      })
+    ).body;
+
+    const res = await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01', tipo_contrato: 'INDEFINIDO'
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.tipo_contrato).toBe('INDEFINIDO');
+  });
+
   it('PATCH acepta y persiste datos personales nuevos', async () => {
     const app = createApp();
     const col = (

@@ -120,7 +120,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 
 // Nuevo contrato: cierra el contrato activo previo y crea el nuevo (historial de sueldos).
 router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { sueldo_base, fecha_inicio, notas } = req.body;
+  const { sueldo_base, fecha_inicio, notas, tipo_contrato } = req.body;
   if (!sueldo_base || !fecha_inicio) {
     return res.status(400).json({ error: 'sueldo_base y fecha_inicio requeridos' });
   }
@@ -132,9 +132,9 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
       [fecha_inicio, req.params.id]
     );
     const { rows } = await client.query(
-      `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio, notas)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.params.id, sueldo_base, fecha_inicio, notas]
+      `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio, notas, tipo_contrato)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.params.id, sueldo_base, fecha_inicio, notas, tipo_contrato ?? null]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
