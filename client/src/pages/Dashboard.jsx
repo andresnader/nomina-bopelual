@@ -6,6 +6,7 @@ import KpiCard from '../components/KpiCard.jsx';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
 
@@ -87,7 +88,10 @@ export default function Dashboard() {
   const [periodos, setPeriodos] = useState([]);
   const [colaboradores, setColaboradores] = useState([]);
   const [pendientes, setPendientes] = useState([]);
-  const [error, setError] = useState(null);
+  const [prestamosResumen, setPrestamosResumen] = useState({});
+  const [descuentosActivos, setDescuentosActivos] = useState([]);
+  const [sinDocumentos, setSinDocumentos] = useState([]);
+  const toast = useToast();
 
   const esGestor = ['ADMIN', 'RRHH', 'GERENCIA'].includes(usuario.rol);
 
@@ -97,13 +101,19 @@ export default function Dashboard() {
       api.get('/periodos'),
       api.get('/colaboradores?activo=true&per_page=all'),
       api.get('/ausencias?estado=SOLICITADA'),
+      api.get('/prestamos?activo=true&per_page=1'),
+      api.get('/descuentos?activo=true'),
+      api.get('/reportes/documentos-faltantes'),
     ])
-      .then(([p, c, a]) => {
+      .then(([p, c, a, pr, d, doc]) => {
         setPeriodos(p);
         setColaboradores(c.data || c);
         setPendientes(a);
+        setPrestamosResumen(pr.resumen || {});
+        setDescuentosActivos(d);
+        setSinDocumentos(doc);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => toast.error(e.message));
   }, [esGestor]);
 
   if (!esGestor) {
@@ -118,10 +128,27 @@ export default function Dashboard() {
   const ultimo = periodos[0];
   const enBorrador = periodos.filter((p) => p.estado === 'BORRADOR').length;
 
+  const mesActual = new Date().getMonth();
+  const aniversarios = colaboradores.filter(
+    (c) => c.fecha_ingreso && new Date(c.fecha_ingreso).getUTCMonth() === mesActual
+  );
+
+  const porEmpresa = colaboradores.reduce((acc, c) => {
+    const k = c.empresa || 'Sin empresa';
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  const porDepartamento = colaboradores.reduce((acc, c) => {
+    const k = c.departamento || 'Sin depto.';
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+
+  const descuentosMonto = descuentosActivos.reduce((s, d) => s + Number(d.monto), 0);
+
   return (
     <div className="animate-fade-in">
       <PageTitle>Dashboard</PageTitle>
-      {error && <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard titulo="Último período" valor={ultimo ? money(ultimo.total_neto) : '—'} sub={ultimo?.nombre} />
         <KpiCard titulo="Colaboradores activos" valor={colaboradores.length} />
@@ -139,6 +166,36 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      <h2 className="font-display font-bold text-slate-900 mt-6 mb-3">Talento Humano</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard titulo="Aniversarios este mes" valor={aniversarios.length}
+          sub={aniversarios.slice(0, 3).map((c) => c.nombre.split(' ')[0]).join(', ') || 'Ninguno'} />
+        <KpiCard titulo="Préstamos y descuentos activos" valor={(prestamosResumen.activos ?? 0) + descuentosActivos.length}
+          sub={`${money((Number(prestamosResumen.cuota_activa) || 0) + descuentosMonto)} / quincena`} />
+        <KpiCard titulo="Documentos faltantes" valor={sinDocumentos.length}
+          sub={sinDocumentos.length > 0
+            ? sinDocumentos.slice(0, 2).map((c) => c.nombre.split(' ')[0]).join(', ') + (sinDocumentos.length > 2 ? ` y ${sinDocumentos.length - 2} más` : '')
+            : 'Todos al día'} />
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Por empresa</p>
+          {Object.entries(porEmpresa).map(([k, v]) => (
+            <div key={k} className="flex justify-between text-sm py-0.5">
+              <span className="text-slate-600">{k}</span><span className="font-semibold">{v}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+      <Card className="mt-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Distribución por departamento</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {Object.entries(porDepartamento).map(([k, v]) => (
+            <div key={k} className="flex justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
+              <span className="text-slate-600">{k}</span><span className="font-semibold">{v}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
