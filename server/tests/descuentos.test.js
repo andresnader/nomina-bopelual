@@ -124,4 +124,36 @@ describe('descuentos recurrentes', () => {
     const { rows } = await pool.query('SELECT activo FROM descuentos_recurrentes WHERE id=$1', [desc.id]);
     expect(rows[0].activo).toBe(true);
   });
+
+  it('POST y PATCH aceptan fecha_vencimiento', async () => {
+    const app = createApp();
+    const col = await crearColaborador(app);
+
+    const creado = await auth(request(app).post('/api/descuentos')).send({
+      colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 12, fecha_vencimiento: '2026-12-31'
+    });
+    expect(creado.status).toBe(201);
+    expect(creado.body.fecha_vencimiento.slice(0, 10)).toBe('2026-12-31');
+
+    const editado = await auth(request(app).patch(`/api/descuentos/${creado.body.id}`)).send({
+      fecha_vencimiento: '2027-01-15'
+    });
+    expect(editado.status).toBe(200);
+    expect(editado.body.fecha_vencimiento.slice(0, 10)).toBe('2027-01-15');
+  });
+
+  it('PATCH con una fecha inválida responde 400 (no se cuelga)', async () => {
+    const app = createApp();
+    const col = await crearColaborador(app);
+    const creado = (
+      await auth(request(app).post('/api/descuentos')).send({
+        colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 12
+      })
+    ).body;
+
+    const res = await auth(request(app).patch(`/api/descuentos/${creado.id}`)).send({
+      fecha_vencimiento: 'no-es-una-fecha'
+    });
+    expect(res.status).toBe(400);
+  });
 });
