@@ -48,6 +48,35 @@ describe('préstamos', () => {
     expect(Number(rows[0].saldo_pendiente)).toBe(200);
   });
 
+  it('un préstamo tipo=ANTICIPO genera ANTICIPO_SUELDO en vez de CUOTA_PRESTAMO', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `AnticipoNomina ${Date.now()}`, cedula: `AL${Date.now() % 1e8}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const anticipo = (
+      await auth(request(app).post('/api/prestamos')).send({
+        colaborador_id: col.id, monto_total: 200, cuota_quincena: 50, fecha_inicio: '2026-11-01', tipo: 'ANTICIPO'
+      })
+    ).body;
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `anticipo nomina test ${Date.now()}`, fecha_inicio: '2026-11-16', fecha_fin: '2026-11-30', quincena: 2
+    });
+    const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    const lineas = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+
+    const linea = lineas.find((l) => l.prestamo_id === anticipo.id);
+    expect(linea.tipo_linea).toBe('ANTICIPO_SUELDO');
+    expect(linea.descripcion).toBe('Cuota de anticipo');
+    expect(lineas.some((l) => l.tipo_linea === 'CUOTA_PRESTAMO')).toBe(false);
+  });
+
   async function crearPrestamo(app, monto = 300, cuota = 100) {
     const col = (
       await auth(request(app).post('/api/colaboradores')).send({

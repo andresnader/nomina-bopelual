@@ -36,10 +36,13 @@ export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, p
   for (const pr of prestamos) {
     const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
     if (r.aplicada > 0) {
+      const esAnticipo = pr.tipo === 'ANTICIPO';
+      const tipoLinea = esAnticipo ? 'ANTICIPO_SUELDO' : 'CUOTA_PRESTAMO';
+      const descripcion = esAnticipo ? 'Cuota de anticipo' : 'Cuota de préstamo';
       await client.query(
         `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, prestamo_id)
-         VALUES ($1,'CUOTA_PRESTAMO','DESCUENTO',$2,'Cuota de préstamo',false,$3)`,
-        [rolId, r.aplicada, pr.id]
+         VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
+        [rolId, tipoLinea, r.aplicada, descripcion, pr.id]
       );
       await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
         r.saldoNuevo, r.activo, pr.id
