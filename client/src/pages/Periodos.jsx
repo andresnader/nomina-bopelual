@@ -20,6 +20,8 @@ export default function Periodos() {
     cargar();
   }, []);
 
+  const enBorrador = lista.find((p) => p.estado === 'BORRADOR');
+
   const crear = async (e) => {
     e.preventDefault();
     setError(null);
@@ -40,7 +42,8 @@ export default function Periodos() {
             <RoleGate roles={['ADMIN', 'RRHH']}>
               <button
                 onClick={() => setForm(VACIO)}
-                className="btn-primary"
+                disabled={!!enBorrador}
+                className="btn-primary disabled:opacity-40"
               >
                 Nuevo período
               </button>
@@ -50,6 +53,13 @@ export default function Periodos() {
           Períodos
         </PageTitle>
 
+      {enBorrador && (
+        <div className="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-sm animate-slide-up">
+          Hay un período en BORRADOR pendiente —{' '}
+          <Link to={`/periodos/${enBorrador.id}`} className="link font-medium">{enBorrador.nombre}</Link>
+          {' '}— apruébalo o ciérralo antes de crear uno nuevo.
+        </div>
+      )}
       {msg && <div className="mb-4 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm animate-slide-up">{msg}</div>}
       {error && <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm animate-slide-up">{error}</div>}
 
