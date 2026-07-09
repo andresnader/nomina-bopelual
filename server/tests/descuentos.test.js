@@ -74,4 +74,54 @@ describe('descuentos recurrentes', () => {
     expect(rows[0].cuotas_restantes).toBe(0);
     expect(rows[0].activo).toBe(false);
   });
+
+  it('un descuento vencido antes de que empiece el período no se aplica y queda desactivado', async () => {
+    const app = createApp();
+    const col = await crearColaborador(app);
+    const desc = (
+      await auth(request(app).post('/api/descuentos')).send({
+        colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 15, aplicar_en: 0
+      })
+    ).body;
+    await pool.query('UPDATE descuentos_recurrentes SET fecha_vencimiento=$1 WHERE id=$2', ['2026-08-01', desc.id]);
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `vencido test ${Date.now()}`,
+      fecha_inicio: '2026-09-16', fecha_fin: '2026-09-30', quincena: 2
+    });
+    expect(per.status).toBe(201);
+
+    const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    const lineas = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    expect(lineas.some((l) => l.tipo_linea === 'ALIMENTACION')).toBe(false);
+
+    const { rows } = await pool.query('SELECT activo FROM descuentos_recurrentes WHERE id=$1', [desc.id]);
+    expect(rows[0].activo).toBe(false);
+  });
+
+  it('un descuento que vence el mismo día que empieza el período todavía se aplica', async () => {
+    const app = createApp();
+    const col = await crearColaborador(app);
+    const desc = (
+      await auth(request(app).post('/api/descuentos')).send({
+        colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 15, aplicar_en: 0
+      })
+    ).body;
+    await pool.query('UPDATE descuentos_recurrentes SET fecha_vencimiento=$1 WHERE id=$2', ['2026-10-16', desc.id]);
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `vence hoy test ${Date.now()}`,
+      fecha_inicio: '2026-10-16', fecha_fin: '2026-10-31', quincena: 2
+    });
+    expect(per.status).toBe(201);
+
+    const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    const lineas = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    expect(lineas.some((l) => l.tipo_linea === 'ALIMENTACION')).toBe(true);
+
+    const { rows } = await pool.query('SELECT activo FROM descuentos_recurrentes WHERE id=$1', [desc.id]);
+    expect(rows[0].activo).toBe(true);
+  });
 });

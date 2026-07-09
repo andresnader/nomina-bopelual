@@ -94,7 +94,7 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `SELECT rp.colaborador_id, p.estado, p.fecha_fin, p.quincena
+      `SELECT rp.colaborador_id, p.estado, p.fecha_inicio, p.fecha_fin, p.quincena
        FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id WHERE rp.id=$1 FOR UPDATE`,
       [req.params.id]
     );
@@ -107,7 +107,7 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
       return res.status(409).json({ error: `período ${rows[0].estado}: no editable` });
     }
     const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
-    const { agregadas: agregadosDescuentos, actualizadas } = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena);
+    const { agregadas: agregadosDescuentos, actualizadas } = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_inicio);
     const totales = await recalcularTotales(client, req.params.id);
     await client.query('COMMIT');
     res.json({ ...totales, agregadas: agregadosPrestamos + agregadosDescuentos, actualizadas });

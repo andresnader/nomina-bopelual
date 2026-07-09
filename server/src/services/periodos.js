@@ -54,7 +54,19 @@ export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, p
 // quincena: inserta los que aún no tenga (por descuento_recurrente_id) y
 // refresca el monto/tipo/descripción de los que ya tenga si el descuento
 // origen fue editado después de generado el rol.
-export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, quincena) {
+export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, quincena, periodoFechaInicio) {
+  // Desactivación perezosa: si este período ya empieza después de la fecha
+  // de vencimiento, el descuento deja de aplicarse desde aquí en adelante.
+  // La consulta de abajo ya filtra activo=true, así que no hace falta
+  // excluirlo también ahí.
+  await client.query(
+    `UPDATE descuentos_recurrentes
+     SET activo=false
+     WHERE colaborador_id=$1 AND activo=true
+       AND fecha_vencimiento IS NOT NULL AND fecha_vencimiento < $2`,
+    [colaboradorId, periodoFechaInicio]
+  );
+
   const { rows: descuentos } = await client.query(
     `SELECT d.* FROM descuentos_recurrentes d
      WHERE d.colaborador_id=$1 AND d.activo=true AND d.aplicar_en IN (0,$2)`,
@@ -157,7 +169,7 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
     }
 
     await aplicarPrestamosPendientes(client, rolId, col.id, periodoRows[0].fecha_fin);
-    await aplicarDescuentosPendientes(client, rolId, col.id, quincena);
+    await aplicarDescuentosPendientes(client, rolId, col.id, quincena, periodoRows[0].fecha_inicio);
 
     await recalcularTotales(client, rolId);
     creados++;
@@ -183,7 +195,7 @@ export async function sincronizarPeriodo(client, periodoId) {
   let actualizadas = 0;
   for (const rol of roles) {
     agregadas += await aplicarPrestamosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].fecha_fin);
-    const descuentos = await aplicarDescuentosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena);
+    const descuentos = await aplicarDescuentosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_inicio);
     agregadas += descuentos.agregadas;
     actualizadas += descuentos.actualizadas;
     await recalcularTotales(client, rol.id);
