@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { Modal } from '../components/Modal.jsx';
-import { money } from '../utils.js';
+import { money, fecha } from '../utils.js';
 import { useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 
@@ -14,7 +14,7 @@ export const QUINCENA_LABEL = { 0: 'Ambas', 1: '1ra quincena', 2: '2da quincena'
 // Formulario reutilizado aquí y en la ficha del colaborador.
 export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError }) {
   const [tipos, setTipos] = useState([]);
-  const [form, setForm] = useState({ colaborador_id: colaboradorId || '', tipo_linea: 'ALIMENTACION', monto: '', aplicar_en: 0, cuotas_restantes: '', notas: '' });
+  const [form, setForm] = useState({ colaborador_id: colaboradorId || '', tipo_linea: 'ALIMENTACION', monto: '', aplicar_en: 0, cuotas_restantes: '', fecha_vencimiento: '', notas: '' });
 
   useEffect(() => {
     api.get('/descuentos/tipos').then(setTipos).catch(() => {});
@@ -28,8 +28,9 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
         colaborador_id: colaboradorId || form.colaborador_id,
         aplicar_en: Number(form.aplicar_en),
         cuotas_restantes: form.cuotas_restantes ? Number(form.cuotas_restantes) : null,
+        fecha_vencimiento: form.fecha_vencimiento || null,
       });
-      setForm({ ...form, monto: '', cuotas_restantes: '', notas: '' });
+      setForm({ ...form, monto: '', cuotas_restantes: '', fecha_vencimiento: '', notas: '' });
       onCreado();
     } catch (err) {
       onError(err.message);
@@ -57,6 +58,8 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
       </select>
       <input type="number" min="1" placeholder="Cuotas (opcional)" className="input w-full"
         value={form.cuotas_restantes} onChange={(e) => setForm({ ...form, cuotas_restantes: e.target.value })} />
+      <input type="date" title="Vence el (opcional)" className="input w-full"
+        value={form.fecha_vencimiento} onChange={(e) => setForm({ ...form, fecha_vencimiento: e.target.value })} />
       <button className="btn btn-primary">Agregar</button>
       <input placeholder="Notas (opcional)" className={`input w-full ${colaboradorId ? 'md:col-span-5' : 'md:col-span-6'}`}
         value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
@@ -108,6 +111,7 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
         monto: Number(editando.monto),
         aplicar_en: Number(editando.aplicar_en),
         cuotas_restantes: editando.cuotas_restantes === '' ? null : Number(editando.cuotas_restantes),
+        fecha_vencimiento: editando.fecha_vencimiento || null,
         notas: editando.notas || null,
         activo: editando.activo,
       });
@@ -129,6 +133,7 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
             <th className="p-3 text-right">Monto</th>
             <th className="p-3">Aplica en</th>
             <th className="p-3 text-right">Cuotas rest.</th>
+            <th className="p-3">Vence</th>
             <th className="p-3">Estado</th>
             <th className="p-3"></th>
           </tr>
@@ -147,6 +152,7 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
               <td className="p-3 text-right font-medium">{money(d.monto)}</td>
               <td className="p-3">{QUINCENA_LABEL[d.aplicar_en]}</td>
               <td className="p-3 text-right">{d.cuotas_restantes ?? '∞'}</td>
+              <td className="p-3">{d.fecha_vencimiento ? fecha(d.fecha_vencimiento) : '∞'}</td>
               <td className="p-3">
                 <button onClick={() => alternar(d)}
                   className={d.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
@@ -154,7 +160,7 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
                 </button>
               </td>
               <td className="p-3 text-right whitespace-nowrap">
-                <button onClick={() => setEditando({ ...d, monto: String(d.monto), cuotas_restantes: d.cuotas_restantes ?? '' })}
+                <button onClick={() => setEditando({ ...d, monto: String(d.monto), cuotas_restantes: d.cuotas_restantes ?? '', fecha_vencimiento: d.fecha_vencimiento?.slice(0, 10) ?? '' })}
                   className="text-slate-400 hover:text-gold-600 p-1.5" title="Editar">
                   <Pencil size={15} />
                 </button>
@@ -165,7 +171,7 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
             </tr>
           ))}
           {descuentos.length === 0 && (
-            <tr><td colSpan={7} className="p-4 text-slate-500">Sin descuentos registrados.</td></tr>
+            <tr><td colSpan={8} className="p-4 text-slate-500">Sin descuentos registrados.</td></tr>
           )}
         </tbody>
       </table>
@@ -192,6 +198,11 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
                 onChange={(e) => setEditando({ ...editando, cuotas_restantes: e.target.value })} />
             </label>
           </div>
+          <label className="text-sm text-slate-600">Vence el (opcional)
+            <input type="date" className="input w-full mt-1"
+              value={editando?.fecha_vencimiento ?? ''}
+              onChange={(e) => setEditando({ ...editando, fecha_vencimiento: e.target.value })} />
+          </label>
           <label className="text-sm text-slate-600">Aplica en
             <select className="input w-full mt-1" value={editando?.aplicar_en ?? 0}
               onChange={(e) => setEditando({ ...editando, aplicar_en: e.target.value })}>
