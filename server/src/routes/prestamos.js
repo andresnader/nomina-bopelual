@@ -11,7 +11,7 @@ const SORT_VALIDO = { nombre: 'c.nombre', fecha_inicio: 'p.fecha_inicio', saldo:
 // Lista paginada con búsqueda por colaborador y filtro por estado.
 // Devuelve además los totales globales del filtro (para los KPIs).
 router.get('/', async (req, res) => {
-  const { colaborador_id, q, activo, sort, order, page, per_page } = req.query;
+  const { colaborador_id, q, activo, tipo, sort, order, page, per_page } = req.query;
   const cond = [];
   const params = [];
 
@@ -22,6 +22,10 @@ router.get('/', async (req, res) => {
   if (activo !== undefined) {
     params.push(activo === 'true');
     cond.push(`p.activo=$${params.length}`);
+  }
+  if (tipo) {
+    params.push(tipo);
+    cond.push(`p.tipo=$${params.length}`);
   }
   if (q) {
     params.push(`%${q}%`);
@@ -73,7 +77,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas } = req.body;
+  const { colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo } = req.body;
   if (!colaborador_id || !monto_total || !cuota_quincena || !fecha_inicio) {
     return res.status(400).json({ error: 'campos requeridos' });
   }
@@ -85,9 +89,9 @@ router.post('/', async (req, res) => {
   }
   // saldo_pendiente arranca en monto_total (=$2).
   const { rows } = await pool.query(
-    `INSERT INTO prestamos (colaborador_id, monto_total, cuota_quincena, saldo_pendiente, fecha_inicio, notas)
-     VALUES ($1,$2,$3,$2,$4,$5) RETURNING *`,
-    [colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas]
+    `INSERT INTO prestamos (colaborador_id, monto_total, cuota_quincena, saldo_pendiente, fecha_inicio, notas, tipo)
+     VALUES ($1,$2,$3,$2,$4,$5,$6) RETURNING *`,
+    [colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo || 'PRESTAMO']
   );
   res.status(201).json(rows[0]);
 });

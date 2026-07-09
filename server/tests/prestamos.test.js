@@ -61,6 +61,37 @@ describe('préstamos', () => {
     ).body;
   }
 
+  it('POST acepta tipo=ANTICIPO y GET filtra por tipo', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `Anticipo ${Date.now()}`, cedula: `AN${Date.now() % 1e8}`
+      })
+    ).body;
+
+    const anticipo = await auth(request(app).post('/api/prestamos')).send({
+      colaborador_id: col.id, monto_total: 200, cuota_quincena: 50, fecha_inicio: '2026-07-01', tipo: 'ANTICIPO'
+    });
+    expect(anticipo.status).toBe(201);
+    expect(anticipo.body.tipo).toBe('ANTICIPO');
+
+    const soloPrestamo = await crearPrestamo(app);
+
+    const filtroAnticipos = await auth(request(app).get(`/api/prestamos?tipo=ANTICIPO&colaborador_id=${col.id}`));
+    expect(filtroAnticipos.body.data.every((p) => p.tipo === 'ANTICIPO')).toBe(true);
+    expect(filtroAnticipos.body.data.some((p) => p.id === anticipo.body.id)).toBe(true);
+
+    const filtroPrestamos = await auth(request(app).get(`/api/prestamos?tipo=PRESTAMO&colaborador_id=${soloPrestamo.colaborador_id}`));
+    expect(filtroPrestamos.body.data.some((p) => p.id === soloPrestamo.id)).toBe(true);
+    expect(filtroPrestamos.body.data.some((p) => p.id === anticipo.body.id)).toBe(false);
+  });
+
+  it('POST sin tipo sigue creando PRESTAMO por defecto (compatibilidad)', async () => {
+    const app = createApp();
+    const pr = await crearPrestamo(app);
+    expect(pr.tipo).toBe('PRESTAMO');
+  });
+
   it('lista paginada con búsqueda y resumen', async () => {
     const app = createApp();
     await crearPrestamo(app);

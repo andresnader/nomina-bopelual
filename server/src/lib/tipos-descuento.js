@@ -13,7 +13,6 @@ const TIPOS_FALLBACK = [
   { tipo: 'SEGURO', label: 'Seguro' },
   { tipo: 'PENSION_ALIMENTICIA', label: 'Pensión alimenticia' },
   { tipo: 'LENTES', label: 'Lentes' },
-  { tipo: 'ANTICIPO_SUELDO', label: 'Anticipo de sueldo' },
   { tipo: 'PRESTAMO_HIPOTECARIO', label: 'Préstamo hipotecario' },
   { tipo: 'PRESTAMO_QUIROGRAFARIO', label: 'Préstamo quirografario' },
   { tipo: 'DESCUENTO_VARIOS', label: 'Descuento varios' },
