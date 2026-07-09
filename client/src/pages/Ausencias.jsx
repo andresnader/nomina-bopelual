@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, X } from 'lucide-react';
+import { Check, Pencil, X } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
+import { Modal } from '../components/Modal.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { fecha } from '../utils.js';
 
 const TIPOS_AUSENCIA = ['VACACIONES', 'PERMISO', 'ENFERMEDAD', 'LICENCIA'];
@@ -54,12 +56,33 @@ export function FormAusencia({ colaboradorId, colaboradores, onCreado, onError }
 }
 
 export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = true, gestionable = false }) {
+  const toast = useToast();
+  const [editando, setEditando] = useState(null);
+
   const decidir = async (a, accion) => {
     try { await api.post(`/ausencias/${a.id}/${accion}`); onCambio(); }
     catch (e) { onError(e.message); }
   };
 
+  const guardarEdicion = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/ausencias/${editando.id}`, {
+        tipo: editando.tipo,
+        fecha_desde: editando.fecha_desde,
+        fecha_hasta: editando.fecha_hasta,
+        motivo: editando.motivo || null,
+      });
+      toast.success('Ausencia actualizada.');
+      setEditando(null);
+      onCambio();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   return (
+    <>
     <table className="w-full text-sm">
       <thead className="text-slate-500 text-left">
         <tr className="border-b border-slate-200">
@@ -93,6 +116,8 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
               <td className="p-3 text-right whitespace-nowrap">
                 {a.estado === 'SOLICITADA' && (
                   <RoleGate roles={['ADMIN', 'RRHH']}>
+                    <button onClick={() => setEditando({ ...a, fecha_desde: a.fecha_desde?.slice(0, 10), fecha_hasta: a.fecha_hasta?.slice(0, 10) })}
+                      title="Editar" className="text-slate-400 hover:text-gold-600 rounded p-1.5"><Pencil size={16} /></button>
                     <button onClick={() => decidir(a, 'aprobar')} title="Aprobar"
                       className="text-emerald-600 hover:bg-emerald-50 rounded p-1.5"><Check size={16} /></button>
                     <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
@@ -108,6 +133,36 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
         )}
       </tbody>
     </table>
+
+    <Modal open={!!editando} onClose={() => setEditando(null)}
+      title="Editar ausencia" size="md"
+      footer={<button type="submit" form="form-editar-ausencia" className="btn btn-primary">Guardar cambios</button>}>
+      <form id="form-editar-ausencia" onSubmit={guardarEdicion} className="grid gap-3">
+        <label className="text-sm text-slate-600">Tipo
+          <select className="input w-full mt-1" value={editando?.tipo ?? ''}
+            onChange={(e) => setEditando({ ...editando, tipo: e.target.value })}>
+            {TIPOS_AUSENCIA.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-sm text-slate-600">Desde
+            <input required type="date" className="input w-full mt-1"
+              value={editando?.fecha_desde ?? ''}
+              onChange={(e) => setEditando({ ...editando, fecha_desde: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Hasta
+            <input required type="date" className="input w-full mt-1"
+              value={editando?.fecha_hasta ?? ''}
+              onChange={(e) => setEditando({ ...editando, fecha_hasta: e.target.value })} />
+          </label>
+        </div>
+        <label className="text-sm text-slate-600">Motivo
+          <input className="input w-full mt-1" value={editando?.motivo ?? ''}
+            onChange={(e) => setEditando({ ...editando, motivo: e.target.value })} />
+        </label>
+      </form>
+    </Modal>
+    </>
   );
 }
 

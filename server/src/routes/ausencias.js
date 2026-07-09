@@ -65,6 +65,33 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Editar una solicitud: solo mientras sigue SOLICITADA (mismo criterio que
+// aprobar/rechazar). Si cambian las fechas y no se manda `dias` a mano, se
+// recalcula con diasEntre, igual que al crear.
+router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { rows: actual } = await pool.query('SELECT * FROM ausencias WHERE id=$1', [req.params.id]);
+  if (actual.length === 0) return res.status(404).json({ error: 'no encontrado' });
+
+  const tipo = req.body.tipo ?? actual[0].tipo;
+  const fecha_desde = req.body.fecha_desde ?? actual[0].fecha_desde;
+  const fecha_hasta = req.body.fecha_hasta ?? actual[0].fecha_hasta;
+  const motivo = 'motivo' in req.body ? req.body.motivo : actual[0].motivo;
+  const dias = req.body.dias ?? diasEntre(fecha_desde, fecha_hasta);
+  if (!(dias > 0)) return res.status(400).json({ error: 'rango de fechas inválido' });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE ausencias SET tipo=$1, fecha_desde=$2, fecha_hasta=$3, dias=$4, motivo=$5
+       WHERE id=$6 AND estado='SOLICITADA' RETURNING *`,
+      [tipo, fecha_desde, fecha_hasta, dias, motivo, req.params.id]
+    );
+    if (rows.length === 0) return res.status(409).json({ error: 'no existe o ya fue decidida' });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 function decisionHandler(estado) {
   return async (req, res) => {
     const { rows } = await pool.query(
