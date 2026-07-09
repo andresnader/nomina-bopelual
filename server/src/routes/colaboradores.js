@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
+import { esTipoContratoValido } from '../lib/tipos-contrato.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -123,6 +124,9 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
   const { sueldo_base, fecha_inicio, notas, tipo_contrato } = req.body;
   if (!sueldo_base || !fecha_inicio) {
     return res.status(400).json({ error: 'sueldo_base y fecha_inicio requeridos' });
+  }
+  if (tipo_contrato && !(await esTipoContratoValido(tipo_contrato))) {
+    return res.status(400).json({ error: `tipo_contrato desconocido: ${tipo_contrato}` });
   }
   const client = await pool.connect();
   try {

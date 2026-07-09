@@ -15,13 +15,6 @@ import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
 const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Préstamos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
-const TIPO_CONTRATO_LABEL = {
-  INDEFINIDO: 'Indefinido',
-  PLAZO_FIJO: 'Plazo fijo / Ocasional',
-  PASANTIA: 'Prácticas / Pasantía',
-  PRESTACION_SERVICIOS: 'Prestación de servicios',
-};
-
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
   useEffect(() => {
@@ -146,6 +139,10 @@ function FichaTab({ col, onGuardado, onError }) {
 
 function ContratosTab({ col, onCambio, onError }) {
   const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
+  const [tiposContrato, setTiposContrato] = useState([]);
+  useEffect(() => {
+    api.get('/tipos-contrato').then(setTiposContrato).catch(() => {});
+  }, []);
 
   const nuevoContrato = async (e) => {
     e.preventDefault();
@@ -173,10 +170,7 @@ function ContratosTab({ col, onCambio, onError }) {
           <select className="input w-full" value={contrato.tipo_contrato}
             onChange={(e) => setContrato({ ...contrato, tipo_contrato: e.target.value })}>
             <option value="">Tipo de contrato —</option>
-            <option value="INDEFINIDO">Indefinido</option>
-            <option value="PLAZO_FIJO">Plazo fijo / Ocasional</option>
-            <option value="PASANTIA">Prácticas / Pasantía</option>
-            <option value="PRESTACION_SERVICIOS">Prestación de servicios</option>
+            {tiposContrato.map((t) => <option key={t.codigo} value={t.codigo}>{t.nombre}</option>)}
           </select>
           <input placeholder="Notas (motivo)" className="input w-full"
             value={contrato.notas} onChange={(e) => setContrato({ ...contrato, notas: e.target.value })} />
@@ -196,7 +190,7 @@ function ContratosTab({ col, onCambio, onError }) {
                 <td className="p-3 font-medium">{money(c.sueldo_base)}</td>
                 <td className="p-3">{fecha(c.fecha_inicio)}</td>
                 <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
-                <td className="p-3">{TIPO_CONTRATO_LABEL[c.tipo_contrato] ?? '—'}</td>
+                <td className="p-3">{tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? '—'}</td>
                 <td className="p-3 text-slate-500">{c.notas || '—'}</td>
               </tr>
             ))}

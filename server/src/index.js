@@ -15,6 +15,7 @@ import usuariosRouter from './routes/usuarios.js';
 import descuentosRouter from './routes/descuentos.js';
 import serviciosDescuentoRouter from './routes/servicios-descuento.js';
 import bancosRouter from './routes/bancos.js';
+import tiposContratoRouter from './routes/tipos-contrato.js';
 import empresasRouter from './routes/empresas.js';
 import ausenciasRouter from './routes/ausencias.js';
 import documentosRouter from './routes/documentos.js';
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/descuentos', descuentosRouter);
   app.use('/api/servicios-descuento', serviciosDescuentoRouter);
   app.use('/api/bancos', bancosRouter);
+  app.use('/api/tipos-contrato', tiposContratoRouter);
   app.use('/api/empresas', empresasRouter);
   app.use('/api/ausencias', ausenciasRouter);
   app.use('/api/colaboradores/:colaboradorId/documentos', documentosRouter);
