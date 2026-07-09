@@ -128,6 +128,46 @@ describe('reportes', () => {
     expect(res.body.some((r) => r.colaborador.includes('Provis') && Number(r.decimo_tercero) === 50)).toBe(true);
   });
 
+  it('decimos-periodo devuelve el desglose de un período cerrado', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `Decimos ${Date.now()}`, cedula: `DC${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1200, fecha_inicio: '2026-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `decimos test ${Date.now()}`, fecha_inicio: '2027-03-16', fecha_fin: '2027-03-31', quincena: 2
+    });
+    const periodoId = per.body.periodo.id;
+
+    await pool.query(`UPDATE usuarios SET rol='RRHH' WHERE email='admin@bopelual.com'`);
+    await auth(request(app).post(`/api/periodos/${periodoId}/aprobar`));
+    await auth(request(app).post(`/api/periodos/${periodoId}/cerrar`));
+
+    const res = await auth(request(app).get(`/api/reportes/decimos-periodo?periodo_id=${periodoId}`));
+    expect(res.status).toBe(200);
+    const fila = res.body.find((r) => r.colaborador.includes('Decimos'));
+    expect(Number(fila.decimo_tercero)).toBeCloseTo(100, 2);
+    expect(Number(fila.decimo_cuarto)).toBeGreaterThan(0);
+    expect(Number(fila.fondos_reserva)).toBeGreaterThan(0);
+  });
+
+  it('decimos-periodo rechaza un período que no está CERRADO', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `DecimosBorrador ${Date.now()}`, cedula: `DB${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `decimos borrador ${Date.now()}`, fecha_inicio: '2027-04-16', fecha_fin: '2027-04-30', quincena: 2
+    });
+    const res = await auth(request(app).get(`/api/reportes/decimos-periodo?periodo_id=${per.body.periodo.id}`));
+    expect(res.status).toBe(400);
+  });
+
   it('costo por departamento con periodo_id devuelve montos reales del período', async () => {
     const app = createApp();
     const col = (await auth(request(app).post('/api/colaboradores')).send({

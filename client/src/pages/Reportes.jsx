@@ -29,6 +29,8 @@ export default function Reportes() {
   const [retenciones, setRetenciones] = useState([]);
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [provisiones, setProvisiones] = useState([]);
+  const [periodoDecimos, setPeriodoDecimos] = useState('');
+  const [decimosPeriodo, setDecimosPeriodo] = useState([]);
   const toast = useToast();
 
   useEffect(() => {
@@ -45,6 +47,13 @@ export default function Reportes() {
   useEffect(() => {
     api.get(`/reportes/provisiones?anio=${anio}`).then(setProvisiones).catch(() => {});
   }, [anio]);
+
+  useEffect(() => {
+    if (!periodoDecimos) return setDecimosPeriodo([]);
+    api.get(`/reportes/decimos-periodo?periodo_id=${periodoDecimos}`).then(setDecimosPeriodo).catch(() => setDecimosPeriodo([]));
+  }, [periodoDecimos]);
+
+  const periodosCerrados = periodos.filter((p) => p.estado === 'CERRADO');
 
   const maxNeto = Math.max(...evolucion.map((e) => Number(e.neto)), 1);
 
@@ -200,6 +209,46 @@ export default function Reportes() {
               </tr>
             ))}
             {provisiones.length === 0 && <tr><td colSpan={5} className="p-2 text-slate-500">Sin provisiones para este año.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+
+      <Card className="mt-4">
+        <h2 className="font-display font-bold mb-1">Décimos y fondos de reserva por período</h2>
+        <p className="text-sm text-muted mb-3">
+          Desglose real de décimo tercero, décimo cuarto y fondos de reserva generados en un período específico ya cerrado — para conciliar contra el rol de pago de ese mes.
+        </p>
+        <div className="flex gap-2 flex-wrap mb-4">
+          <select value={periodoDecimos} onChange={(e) => setPeriodoDecimos(e.target.value)} className="input flex-1 min-w-48">
+            <option value="">Elige un período cerrado</option>
+            {periodosCerrados.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <button onClick={descargar(`/reportes/decimos-periodo.csv?periodo_id=${periodoDecimos}`, `decimos-periodo-${periodoDecimos}.csv`)}
+            disabled={!periodoDecimos} className="btn btn-primary disabled:opacity-40">
+            Descargar CSV
+          </button>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-2">Colaborador</th>
+              <th className="p-2 text-right">Décimo tercero</th>
+              <th className="p-2 text-right">Décimo cuarto</th>
+              <th className="p-2 text-right">Fondos de reserva</th>
+            </tr>
+          </thead>
+          <tbody>
+            {decimosPeriodo.map((d, i) => (
+              <tr key={i} className="border-b border-slate-200">
+                <td className="p-2">{d.colaborador}</td>
+                <td className="p-2 text-right">{money(d.decimo_tercero)}</td>
+                <td className="p-2 text-right">{money(d.decimo_cuarto)}</td>
+                <td className="p-2 text-right">{money(d.fondos_reserva)}</td>
+              </tr>
+            ))}
+            {decimosPeriodo.length === 0 && (
+              <tr><td colSpan={4} className="p-2 text-slate-500">{periodoDecimos ? 'Sin décimos en este período.' : 'Elige un período para ver el detalle.'}</td></tr>
+            )}
           </tbody>
         </table>
       </Card>

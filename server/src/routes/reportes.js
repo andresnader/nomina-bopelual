@@ -127,6 +127,51 @@ router.get('/provisiones.csv', async (req, res) => {
   res.send(csv);
 });
 
+// Desglose de décimo tercero/cuarto y fondos de reserva de UN período
+// específico (no acumulado anual como /provisiones), para conciliar contra
+// el rol de pago real de ese mes. Solo se expone si el período ya está
+// CERRADO, para no mostrarle a contabilidad cifras que aún pueden cambiar.
+async function periodoCerrado(periodoId) {
+  const { rows } = await pool.query('SELECT estado FROM periodos WHERE id=$1', [periodoId]);
+  if (rows.length === 0) return { codigo: 404, mensaje: 'período no encontrado' };
+  if (rows[0].estado !== 'CERRADO') return { codigo: 400, mensaje: 'el período no está cerrado' };
+  return null;
+}
+
+async function decimosPorPeriodo(periodoId) {
+  const { rows } = await pool.query(
+    `SELECT c.nombre AS colaborador,
+            COALESCE(SUM(l.monto) FILTER (WHERE l.tipo_linea='DECIMO_TERCERO'), 0) AS decimo_tercero,
+            COALESCE(SUM(l.monto) FILTER (WHERE l.tipo_linea='DECIMO_CUARTO'), 0) AS decimo_cuarto,
+            COALESCE(SUM(l.monto) FILTER (WHERE l.tipo_linea='FONDOS_RESERVA'), 0) AS fondos_reserva
+     FROM lineas_rol l
+     JOIN roles_pago rp ON rp.id=l.rol_pago_id
+     JOIN colaboradores c ON c.id=rp.colaborador_id
+     WHERE rp.periodo_id=$1 AND l.tipo_linea IN ('DECIMO_TERCERO','DECIMO_CUARTO','FONDOS_RESERVA')
+     GROUP BY c.nombre ORDER BY c.nombre`,
+    [periodoId]
+  );
+  return rows;
+}
+
+router.get('/decimos-periodo', async (req, res) => {
+  const { periodo_id } = req.query;
+  if (!periodo_id) return res.status(400).json({ error: 'periodo_id requerido' });
+  const err = await periodoCerrado(periodo_id);
+  if (err) return res.status(err.codigo).json({ error: err.mensaje });
+  res.json(await decimosPorPeriodo(periodo_id));
+});
+router.get('/decimos-periodo.csv', async (req, res) => {
+  const { periodo_id } = req.query;
+  if (!periodo_id) return res.status(400).json({ error: 'periodo_id requerido' });
+  const err = await periodoCerrado(periodo_id);
+  if (err) return res.status(err.codigo).json({ error: err.mensaje });
+  const csv = aCsv(await decimosPorPeriodo(periodo_id), ['colaborador', 'decimo_tercero', 'decimo_cuarto', 'fondos_reserva']);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="decimos-periodo-${periodo_id}.csv"`);
+  res.send(csv);
+});
+
 router.get('/documentos-faltantes', async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT c.id, c.nombre, c.tipo, c.empresa
