@@ -22,7 +22,10 @@ describe('colaboradores', () => {
       cedula: `C${Date.now()}`
     });
     expect(crear.status).toBe(201);
-    const lista = await auth(request(app).get('/api/colaboradores'));
+    // per_page=all: sin esto, con la suite completa creando >25 colaboradores
+    // en paralelo, la paginación por defecto puede dejar este afuera de la
+    // primera página según el orden alfabético.
+    const lista = await auth(request(app).get('/api/colaboradores?per_page=all'));
     expect(lista.status).toBe(200);
     expect(lista.body.data.some((c) => c.id === crear.body.id)).toBe(true);
     expect(lista.body.total).toBeGreaterThanOrEqual(1);
