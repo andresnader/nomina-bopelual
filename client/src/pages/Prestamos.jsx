@@ -9,11 +9,16 @@ import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
 
-const VACIO = { colaborador_id: '', monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '' };
+const VACIO = { colaborador_id: '', monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '', tipo: 'PRESTAMO' };
 const FILTROS = [
   { valor: '', label: 'Todos' },
   { valor: 'true', label: 'Activos' },
   { valor: 'false', label: 'Pagados' },
+];
+const FILTROS_TIPO = [
+  { valor: '', label: 'Todos' },
+  { valor: 'PRESTAMO', label: 'Préstamos' },
+  { valor: 'ANTICIPO', label: 'Anticipos' },
 ];
 
 function BarraProgreso({ prestamo }) {
@@ -151,6 +156,7 @@ export default function Prestamos() {
   const [form, setForm] = useState(VACIO);
   const [q, setQ] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('true');
+  const [filtroTipo, setFiltroTipo] = useState('');
   const [pagina, setPagina] = useState(1);
   const [expandido, setExpandido] = useState(null);
   const [modalAbono, setModalAbono] = useState(null); // { prestamo, montoInicial }
@@ -162,10 +168,11 @@ export default function Prestamos() {
     const params = new URLSearchParams({ page: pagina, per_page: 10 });
     if (q) params.set('q', q);
     if (filtroActivo) params.set('activo', filtroActivo);
+    if (filtroTipo) params.set('tipo', filtroTipo);
     api.get(`/prestamos?${params}`).then(setRespuesta).catch((e) => toast.error(e.message));
   };
 
-  useEffect(() => { cargar(); }, [q, filtroActivo, pagina]);
+  useEffect(() => { cargar(); }, [q, filtroActivo, filtroTipo, pagina]);
   useEffect(() => {
     api.get('/colaboradores?activo=true&per_page=all').then((r) => setColaboradores(r.data)).catch(() => {});
   }, []);
@@ -175,7 +182,7 @@ export default function Prestamos() {
     try {
       await api.post('/prestamos', { ...form, monto_total: Number(form.monto_total), cuota_quincena: Number(form.cuota_quincena) });
       setForm(VACIO);
-      toast.success('Préstamo registrado.');
+      toast.success(form.tipo === 'ANTICIPO' ? 'Anticipo registrado.' : 'Préstamo registrado.');
       cargar();
     } catch (err) {
       toast.error(err.message);
@@ -214,8 +221,12 @@ export default function Prestamos() {
       </div>
 
       <Card className="mb-4">
-        <h2 className="font-semibold mb-3">Nuevo préstamo</h2>
-        <form onSubmit={crear} className="grid md:grid-cols-5 gap-2">
+        <h2 className="font-semibold mb-3">Nuevo préstamo / anticipo</h2>
+        <form onSubmit={crear} className="grid md:grid-cols-6 gap-2">
+          <select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} className="input w-full">
+            <option value="PRESTAMO">Préstamo</option>
+            <option value="ANTICIPO">Anticipo</option>
+          </select>
           <select required value={form.colaborador_id}
             onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })} className="input w-full">
             <option value="">Colaborador…</option>
@@ -229,10 +240,10 @@ export default function Prestamos() {
             onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} className="input w-full" />
           <button className="btn btn-primary">Registrar</button>
           <input placeholder="Notas (opcional)" value={form.notas}
-            onChange={(e) => setForm({ ...form, notas: e.target.value })} className="input w-full md:col-span-5" />
+            onChange={(e) => setForm({ ...form, notas: e.target.value })} className="input w-full md:col-span-6" />
         </form>
         <p className="text-xs text-slate-500 mt-2">
-          La fecha es la <strong>primera quincena de descuento</strong>: el préstamo empezará a descontarse recién en el
+          La fecha es la <strong>primera quincena de descuento</strong>: empezará a descontarse recién en el
           período que la incluya, no antes.
         </p>
       </Card>
@@ -245,6 +256,14 @@ export default function Prestamos() {
             {FILTROS.map((f) => (
               <button key={f.valor} onClick={() => { setFiltroActivo(f.valor); setPagina(1); }}
                 className={`px-3 py-2 text-sm ${filtroActivo === f.valor ? 'bg-gold-400 text-brand-900 font-semibold' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex rounded-lg border border-slate-300 overflow-hidden">
+            {FILTROS_TIPO.map((f) => (
+              <button key={f.valor} onClick={() => { setFiltroTipo(f.valor); setPagina(1); }}
+                className={`px-3 py-2 text-sm ${filtroTipo === f.valor ? 'bg-gold-400 text-brand-900 font-semibold' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
                 {f.label}
               </button>
             ))}
@@ -271,6 +290,9 @@ export default function Prestamos() {
                     <Link to={`/colaboradores/${p.colaborador_id}`} className="text-gold-600 font-medium hover:underline">
                       {p.colaborador_nombre}
                     </Link>
+                    <span className={`badge ml-2 ${p.tipo === 'ANTICIPO' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {p.tipo === 'ANTICIPO' ? 'ANTICIPO' : 'PRÉSTAMO'}
+                    </span>
                     {!p.activo && <span className="badge bg-emerald-100 text-emerald-700 ml-2">PAGADO</span>}
                   </td>
                   <td className="p-3 text-right">{money(p.monto_total)}</td>
