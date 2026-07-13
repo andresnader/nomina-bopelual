@@ -20,6 +20,7 @@ import empresasRouter from './routes/empresas.js';
 import ausenciasRouter from './routes/ausencias.js';
 import documentosRouter from './routes/documentos.js';
 import evaluacionesRouter from './routes/evaluaciones.js';
+import contratoEmisionesRouter from './routes/contrato-emisiones.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -58,6 +59,7 @@ export function createApp() {
   app.use('/api/ausencias', ausenciasRouter);
   app.use('/api/colaboradores/:colaboradorId/documentos', documentosRouter);
   app.use('/api/colaboradores/:colaboradorId/evaluaciones', evaluacionesRouter);
+  app.use('/api/colaboradores/:colaboradorId/contratos/:contratoId/emisiones', contratoEmisionesRouter);
   app.use('/api', usuariosRouter);
   app.use(express.static(join(__dirname, '../../client/dist')));
   app.get('*', (_req, res) => res.sendFile(join(__dirname, '../../client/dist/index.html')));

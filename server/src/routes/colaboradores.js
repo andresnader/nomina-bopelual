@@ -71,7 +71,7 @@ router.get(
   async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM colaboradores WHERE id=$1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
-    const [contratos, rolesPago, prestamos] = await Promise.all([
+    const [contratos, rolesPago, prestamos, emisiones] = await Promise.all([
       pool.query('SELECT * FROM contratos WHERE colaborador_id=$1 ORDER BY fecha_inicio DESC', [req.params.id]),
       pool.query(
         `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha
@@ -79,11 +79,20 @@ router.get(
          WHERE rp.colaborador_id=$1 ORDER BY p.fecha_inicio DESC`,
         [req.params.id]
       ),
-      pool.query('SELECT * FROM prestamos WHERE colaborador_id=$1', [req.params.id])
+      pool.query('SELECT * FROM prestamos WHERE colaborador_id=$1', [req.params.id]),
+      pool.query(
+        `SELECT ce.* FROM contrato_emisiones ce
+         JOIN contratos c ON c.id = ce.contrato_id
+         WHERE c.colaborador_id=$1 ORDER BY ce.generado_en DESC`,
+        [req.params.id]
+      )
     ]);
     res.json({
       ...rows[0],
-      contratos: contratos.rows,
+      contratos: contratos.rows.map((c) => ({
+        ...c,
+        emisiones: emisiones.rows.filter((e) => e.contrato_id === c.id)
+      })),
       roles_pago: rolesPago.rows,
       prestamos: prestamos.rows
     });

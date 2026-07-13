@@ -8,9 +8,12 @@ const MESES = [
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
 
-function formatearFechaLarga(fechaISO) {
-  const [anio, mes, dia] = fechaISO.slice(0, 10).split('-').map(Number);
-  return `${dia} de ${MESES[mes - 1]} de ${anio}`;
+function formatearFechaLarga(fecha) {
+  // contrato.fecha_inicio llega como Date (columna date de Postgres vía pg)
+  // o como string 'YYYY-MM-DD' (tests). Se usan getters UTC en ambos casos
+  // porque pg parsea las columnas date a medianoche UTC.
+  const d = fecha instanceof Date ? fecha : new Date(`${fecha.slice(0, 10)}T00:00:00Z`);
+  return `${d.getUTCDate()} de ${MESES[d.getUTCMonth()]} de ${d.getUTCFullYear()}`;
 }
 
 function parrafoTitulo(texto) {
