@@ -138,22 +138,57 @@ function FichaTab({ col, onGuardado, onError }) {
 }
 
 function EmitirContratoModal({ contrato, colaboradorId, onClose, onEmitido, onError }) {
-  const [form, setForm] = useState({
-    funciones: '', remuneracion_letras: '', horas_semanales: '', horas_diarias: '',
-    dias_descanso: '', duracion_texto: '', periodo_prueba_texto: '',
-  });
-  const [enviando, setEnviando] = useState(false);
+  const tipo = contrato.tipo_contrato;
 
-  const campo = (k, props = {}) => (
-    <input className="input w-full" value={form[k]} {...props}
-      onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
-  );
+  const configs = {
+    PRODUCTIVO: {
+      title: 'Emitir contrato productivo',
+      endpoint: `/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones`,
+      fields: [
+        { key: 'funciones', label: 'Funciones del cargo (una por línea)', type: 'textarea', required: true },
+        { key: 'remuneracion_letras', label: 'Remuneración en letras (ej. SEISCIENTOS 00/100)', type: 'text', required: true },
+        { key: 'horas_semanales', label: 'Horas semanales (ej. cuarenta)', type: 'text', required: true, col: 'md:col-span-1' },
+        { key: 'horas_diarias', label: 'Horas diarias (ej. Ocho)', type: 'text', required: true, col: 'md:col-span-1' },
+        { key: 'dias_descanso', label: 'Días de descanso (ej. Dos)', type: 'text', required: true, col: 'md:col-span-1' },
+        { key: 'duracion_texto', label: 'Duración del contrato', type: 'text', required: true },
+        { key: 'periodo_prueba_texto', label: 'Período de prueba', type: 'text', required: true },
+      ],
+    },
+    COMISIONISTA: {
+      title: 'Emitir contrato comisionista',
+      endpoint: `/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones-avanzadas`,
+      fields: [
+        { key: 'comision_porcentaje', label: 'Porcentaje de comisión', type: 'text', required: true },
+        { key: 'anexo_productos', label: 'Anexo N°1 — Productos a comercializar', type: 'textarea', required: true },
+        { key: 'anexo_precios', label: 'Anexo N°2 — Precios mínimos de venta', type: 'textarea', required: true },
+      ],
+      extraBody: { tipo_documento: 'COMISIONISTA' },
+    },
+    SERVICIOS_PROFESIONALES: {
+      title: 'Emitir contrato servicios profesionales',
+      endpoint: `/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones-avanzadas`,
+      fields: [
+        { key: 'honorarios_letras', label: 'Honorarios en letras (ej. NOVECIENTOS DÓLARES)', type: 'text', required: true },
+        { key: 'honorarios_numero', label: 'Honorarios mensuales en USD', type: 'number', required: true },
+        { key: 'plazo_meses', label: 'Plazo en meses', type: 'number', required: true },
+        { key: 'honorarios_mes12_letras', label: 'Honorarios mes 12 en letras (opcional)', type: 'text', required: false },
+        { key: 'honorarios_mes12_numero', label: 'Honorarios mes 12 en USD (opcional)', type: 'number', required: false },
+      ],
+      extraBody: { tipo_documento: 'SERVICIOS_PROFESIONALES' },
+    },
+  };
+
+  const config = configs[tipo] || configs.PRODUCTIVO;
+  const initial = Object.fromEntries(config.fields.map(f => [f.key, '']));
+  const [form, setForm] = useState(initial);
+  const [enviando, setEnviando] = useState(false);
 
   const emitir = async (e) => {
     e.preventDefault();
     setEnviando(true);
     try {
-      await api.post(`/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones`, form);
+      const body = { ...form, ...(config.extraBody || {}) };
+      await api.post(config.endpoint, body);
       onEmitido();
     } catch (err) {
       onError(err.message);
@@ -163,7 +198,7 @@ function EmitirContratoModal({ contrato, colaboradorId, onClose, onEmitido, onEr
   };
 
   return (
-    <Modal open onClose={onClose} title="Emitir contrato productivo" size="lg"
+    <Modal open onClose={onClose} title={config.title} size="lg"
       footer={
         <>
           <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
@@ -173,67 +208,79 @@ function EmitirContratoModal({ contrato, colaboradorId, onClose, onEmitido, onEr
         </>
       }>
       <form id="form-emitir-contrato" onSubmit={emitir} className="grid gap-3">
-        <label className="text-sm text-slate-600">Funciones del cargo (una por línea)
-          <textarea required rows={4} className="input w-full"
-            value={form.funciones} onChange={(e) => setForm({ ...form, funciones: e.target.value })} />
-        </label>
-        <label className="text-sm text-slate-600">Remuneración en letras (ej. SEISCIENTOS 00/100)
-          {campo('remuneracion_letras', { required: true })}
-        </label>
         <div className="grid md:grid-cols-3 gap-3">
-          <label className="text-sm text-slate-600">Horas semanales (ej. cuarenta)
-            {campo('horas_semanales', { required: true })}
-          </label>
-          <label className="text-sm text-slate-600">Horas diarias (ej. Ocho)
-            {campo('horas_diarias', { required: true })}
-          </label>
-          <label className="text-sm text-slate-600">Días de descanso (ej. Dos)
-            {campo('dias_descanso', { required: true })}
-          </label>
+          {config.fields.map(f => {
+            const input = f.type === 'textarea' ? (
+              <textarea required={f.required} rows={4} className="input w-full"
+                value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+            ) : (
+              <input type={f.type || 'text'} required={f.required} className="input w-full"
+                value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
+            );
+            if (f.col) {
+              return <div key={f.key} className={f.col}><label className="text-sm text-slate-600">{f.label}{input}</label></div>;
+            }
+            return <div key={f.key} className="md:col-span-3"><label className="text-sm text-slate-600">{f.label}{input}</label></div>;
+          })}
         </div>
-        <label className="text-sm text-slate-600">Duración del contrato
-          {campo('duracion_texto', { required: true })}
-        </label>
-        <label className="text-sm text-slate-600">Período de prueba
-          {campo('periodo_prueba_texto', { required: true })}
-        </label>
       </form>
     </Modal>
   );
 }
 
+const TIPOS_EMITIBLES = ['PRODUCTIVO', 'COMISIONISTA', 'SERVICIOS_PROFESIONALES'];
+
 function EmisionCell({ contrato, colaboradorId, onCambio, onError }) {
   const [modalAbierto, setModalAbierto] = useState(false);
-  if (contrato.tipo_contrato !== 'PRODUCTIVO') {
+  if (!TIPOS_EMITIBLES.includes(contrato.tipo_contrato)) {
     return <span className="text-slate-400 text-xs" title="Plantilla no disponible aún">—</span>;
   }
+
+  // Debe coincidir exactamente con CONFIG[...].tabla en contrato-emisiones-avanzadas.js
+  const TABLA_EMISION = {
+    PRODUCTIVO: 'contrato_emisiones',
+    COMISIONISTA: 'contrato_comisionista_emisiones',
+    SERVICIOS_PROFESIONALES: 'contrato_servicios_profesionales_emisiones',
+  };
+  const tablaEmision = (t) => TABLA_EMISION[t];
 
   const subirFirmado = async (emisionId, e) => {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
     if (archivo.size > 5 * 1024 * 1024) return onError('El archivo supera los 5 MB');
-    const res = await fetch(
-      `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${emisionId}/firmado`,
-      { method: 'POST', credentials: 'include', headers: { 'Content-Type': archivo.type || 'application/octet-stream' }, body: archivo }
-    );
+    const base = `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones`;
+    const url = contrato.tipo_contrato === 'PRODUCTIVO'
+      ? `${base}/${emisionId}/firmado`
+      : `${base}-avanzadas/${tablaEmision(contrato.tipo_contrato)}/${emisionId}/firmado`;
+    const res = await fetch(url, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': archivo.type || 'application/octet-stream' },
+      body: archivo,
+    });
     if (!res.ok) return onError((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     e.target.value = '';
     onCambio();
   };
 
   const ultima = contrato.emisiones?.[0];
+  const generadoUrl = (id) => contrato.tipo_contrato === 'PRODUCTIVO'
+    ? `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${id}/generado`
+    : `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones-avanzadas/${tablaEmision(contrato.tipo_contrato)}/${id}/generado`;
+  const firmadoUrl = (id) => contrato.tipo_contrato === 'PRODUCTIVO'
+    ? `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${id}/firmado`
+    : `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones-avanzadas/${tablaEmision(contrato.tipo_contrato)}/${id}/firmado`;
 
   return (
     <div className="flex flex-col items-start gap-1">
       {ultima && (
-        <a href={`/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${ultima.id}/generado`}
+        <a href={generadoUrl(ultima.id)}
           className="text-xs text-gold-600 hover:underline flex items-center gap-1">
           <Download size={12} /> Generado
         </a>
       )}
       {ultima && (
         ultima.archivo_firmado_key ? (
-          <a href={`/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${ultima.id}/firmado`}
+          <a href={firmadoUrl(ultima.id)}
             className="text-xs text-emerald-700 hover:underline flex items-center gap-1">
             <Download size={12} /> Firmado
           </a>
@@ -627,6 +674,118 @@ function AusenciasTab({ col, onError }) {
   );
 }
 
+function DocumentosColaboradorCell({ col, tipo, label, onError }) {
+  const [emisiones, setEmisiones] = useState([]);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const cargar = () => api.get(`/colaboradores/${col.id}/documentos-emitidos/${tipo}`).then(setEmisiones).catch(() => {});
+  useEffect(() => { cargar(); }, [col.id]);
+
+  const subirFirmado = async (emisionId, e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    if (archivo.size > 5 * 1024 * 1024) return onError('El archivo supera los 5 MB');
+    const res = await fetch(`/api/colaboradores/${col.id}/documentos-emitidos/${tipo}/${emisionId}/firmado`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': archivo.type || 'application/octet-stream' },
+      body: archivo,
+    });
+    if (!res.ok) return onError((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    e.target.value = '';
+    cargar();
+  };
+
+  const ultima = emisiones[0];
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {ultima?.archivo_generado_key && (
+        <a href={`/api/colaboradores/${col.id}/documentos-emitidos/${tipo}/${ultima.id}/generado`}
+          className="text-xs text-gold-600 hover:underline flex items-center gap-1">
+          <Download size={12} /> Generado
+        </a>
+      )}
+      {ultima?.archivo_firmado_key ? (
+        <a href={`/api/colaboradores/${col.id}/documentos-emitidos/${tipo}/${ultima.id}/firmado`}
+          className="text-xs text-emerald-700 hover:underline flex items-center gap-1">
+          <Download size={12} /> Firmado
+        </a>
+      ) : ultima && (
+        <label className="text-xs text-slate-500 cursor-pointer hover:text-gold-600">
+          Subir firmado
+          <input type="file" className="hidden" onChange={(e) => subirFirmado(ultima.id, e)} />
+        </label>
+      )}
+      <button type="button" onClick={() => setModalAbierto(true)}
+        className="text-xs text-slate-500 hover:text-gold-600">
+        {ultima ? 'Reemitir' : 'Emitir'}
+      </button>
+      {modalAbierto && (
+        <EmitirDocumentoColaboradorModal
+          tipo={tipo} label={label} col={col}
+          onClose={() => setModalAbierto(false)}
+          onEmitido={() => { setModalAbierto(false); cargar(); }}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+const CAMPOS_POR_DOCUMENTO = {
+  confidencialidad: [
+    { key: 'cargo', label: 'Cargo / función', type: 'text', required: true },
+  ],
+  consentimiento_expreso: [
+    { key: 'cargo', label: 'Cargo / función', type: 'text', required: true },
+  ],
+  consentimiento_biometrico: [],
+};
+
+function EmitirDocumentoColaboradorModal({ tipo, label, col, onClose, onEmitido, onError }) {
+  const campos = CAMPOS_POR_DOCUMENTO[tipo] || [];
+  const [form, setForm] = useState(Object.fromEntries(campos.map(c => [c.key, ''])));
+  const [enviando, setEnviando] = useState(false);
+
+  const emitir = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+    try {
+      await api.post(`/colaboradores/${col.id}/documentos-emitidos/${tipo}`, form);
+      onEmitido();
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Emitir ${label}`} size="sm"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+          <button form="form-emitir-doc" disabled={enviando} className="btn btn-primary">
+            {enviando ? 'Generando…' : 'Generar y descargar'}
+          </button>
+        </>
+      }>
+      <form id="form-emitir-doc" onSubmit={emitir} className="grid gap-3">
+        {campos.map(c => (
+          <label key={c.key} className="text-sm text-slate-600">{c.label}
+            <input className="input w-full" required={c.required}
+              value={form[c.key]} onChange={e => setForm({ ...form, [c.key]: e.target.value })} />
+          </label>
+        ))}
+      </form>
+    </Modal>
+  );
+}
+
+const DOCUMENTOS_COLABORADOR = [
+  { tipo: 'confidencialidad', label: 'Acuerdo de Confidencialidad' },
+  { tipo: 'consentimiento_expreso', label: 'Consentimiento Expreso (imagen/datos)' },
+  { tipo: 'consentimiento_biometrico', label: 'Consentimiento Biométrico' },
+];
+
 function DocumentosTab({ col, onError }) {
   const [docs, setDocs] = useState([]);
   const [tipo, setTipo] = useState('CONTRATO');
@@ -670,6 +829,26 @@ function DocumentosTab({ col, onError }) {
 
   return (
     <div className="grid gap-4">
+      <Card>
+        <h2 className="font-semibold mb-3">Documentos emitibles</h2>
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-3">Documento</th><th className="p-3">Emisión</th>
+            </tr>
+          </thead>
+          <tbody>
+            {DOCUMENTOS_COLABORADOR.map(d => (
+              <tr key={d.tipo} className="border-b border-slate-200">
+                <td className="p-3 font-medium">{d.label}</td>
+                <td className="p-3">
+                  <DocumentosColaboradorCell col={col} tipo={d.tipo} label={d.label} onError={onError} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
       <Card>
         <h2 className="font-semibold mb-3">Subir documento (máx. 5 MB)</h2>
         <div className="flex flex-wrap items-center gap-2">

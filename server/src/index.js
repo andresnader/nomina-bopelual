@@ -4,6 +4,7 @@ import { dirname, join } from 'path';
 import cors from 'cors';
 import cookieSession from 'cookie-session';
 import { PORT, SESSION_SECRET } from './config.js';
+import { requireAuth } from './auth/middleware.js';
 import authRouter from './routes/auth.js';
 import colaboradoresRouter from './routes/colaboradores.js';
 import periodosRouter from './routes/periodos.js';
@@ -21,6 +22,9 @@ import ausenciasRouter from './routes/ausencias.js';
 import documentosRouter from './routes/documentos.js';
 import evaluacionesRouter from './routes/evaluaciones.js';
 import contratoEmisionesRouter from './routes/contrato-emisiones.js';
+import contratoEmisionesAvanzadasRouter from './routes/contrato-emisiones-avanzadas.js';
+import colaboradorDocumentosRouter from './routes/colaborador-documentos.js';
+import pool from './db/pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -60,7 +64,40 @@ export function createApp() {
   app.use('/api/colaboradores/:colaboradorId/documentos', documentosRouter);
   app.use('/api/colaboradores/:colaboradorId/evaluaciones', evaluacionesRouter);
   app.use('/api/colaboradores/:colaboradorId/contratos/:contratoId/emisiones', contratoEmisionesRouter);
+  app.use('/api/colaboradores/:colaboradorId/contratos/:contratoId/emisiones-avanzadas', contratoEmisionesAvanzadasRouter);
+  // Path distinto de /documentos (arriba): documentosRouter ya define GET/:docId,
+  // que interceptaría cualquier :tipo (ej. 'confidencialidad') como si fuera un docId.
+  app.use('/api/colaboradores/:colaboradorId/documentos-emitidos', colaboradorDocumentosRouter);
   app.use('/api', usuariosRouter);
+
+  // Contratos próximos a vencer
+  app.get('/api/contratos/proximos-vencer', requireAuth, async (_req, res) => {
+    const { rows } = await pool.query('SELECT * FROM contratos_proximos_vencer ORDER BY fecha_fin');
+    res.json(rows);
+  });
+
+  // Actualizar contrato
+  app.patch('/api/colaboradores/:colaboradorId/contratos/:contratoId', requireAuth, async (req, res) => {
+    const { colaboradorId, contratoId } = req.params;
+    const permitidos = ['sueldo_base', 'fecha_inicio', 'fecha_fin', 'tipo_contrato', 'notas'];
+    const updates = [];
+    const vals = [];
+    let i = 1;
+    for (const campo of permitidos) {
+      if (req.body[campo] !== undefined) {
+        updates.push(`${campo}=$${i++}`);
+        vals.push(req.body[campo]);
+      }
+    }
+    if (updates.length === 0) return res.status(400).json({ error: 'no hay campos para actualizar' });
+    vals.push(contratoId, colaboradorId);
+    const { rows } = await pool.query(
+      `UPDATE contratos SET ${updates.join(', ')} WHERE id=$${i++} AND colaborador_id=$${i} RETURNING *`,
+      vals
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'contrato no encontrado' });
+    res.json(rows[0]);
+  });
   app.use(express.static(join(__dirname, '../../client/dist')));
   app.get('*', (_req, res) => res.sendFile(join(__dirname, '../../client/dist/index.html')));
   return app;

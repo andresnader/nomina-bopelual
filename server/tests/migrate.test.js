@@ -15,7 +15,9 @@ describe('migraciones', () => {
     for (const t of [
       'colaboradores', 'contratos', 'periodos', 'roles_pago', 'lineas_rol',
       'provisiones', 'prestamos', 'facturas_proveedor', 'usuarios', 'parametros',
-      'contrato_emisiones'
+      'contrato_emisiones', 'colaborador_confidencialidad', 'colaborador_consentimiento_expreso',
+      'colaborador_consentimiento_biometrico', 'contrato_comisionista_emisiones',
+      'contrato_servicios_profesionales_emisiones'
     ]) {
       expect(nombres).toContain(t);
     }

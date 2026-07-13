@@ -80,10 +80,22 @@ router.get(
         [req.params.id]
       ),
       pool.query('SELECT * FROM prestamos WHERE colaborador_id=$1', [req.params.id]),
+      // Une las 3 tablas de emisiones de contrato (productivo + las 2 avanzadas de
+      // 015_documentos_emitidos.sql) para que el badge Generado/Firmado en el UI
+      // funcione sin importar el tipo_contrato.
       pool.query(
-        `SELECT ce.* FROM contrato_emisiones ce
-         JOIN contratos c ON c.id = ce.contrato_id
-         WHERE c.colaborador_id=$1 ORDER BY ce.generado_en DESC`,
+        `SELECT id, contrato_id, archivo_generado_key, archivo_firmado_key, generado_en
+         FROM contrato_emisiones ce
+         WHERE EXISTS (SELECT 1 FROM contratos c WHERE c.id = ce.contrato_id AND c.colaborador_id=$1)
+         UNION ALL
+         SELECT id, contrato_id, archivo_generado_key, archivo_firmado_key, generado_en
+         FROM contrato_comisionista_emisiones cce
+         WHERE EXISTS (SELECT 1 FROM contratos c WHERE c.id = cce.contrato_id AND c.colaborador_id=$1)
+         UNION ALL
+         SELECT id, contrato_id, archivo_generado_key, archivo_firmado_key, generado_en
+         FROM contrato_servicios_profesionales_emisiones csp
+         WHERE EXISTS (SELECT 1 FROM contratos c WHERE c.id = csp.contrato_id AND c.colaborador_id=$1)
+         ORDER BY generado_en DESC`,
         [req.params.id]
       )
     ]);
