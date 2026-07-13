@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import cors from 'cors';
 import cookieSession from 'cookie-session';
 import { PORT, SESSION_SECRET } from './config.js';
-import { requireAuth } from './auth/middleware.js';
+import { requireAuth, requireRole } from './auth/middleware.js';
 import authRouter from './routes/auth.js';
 import colaboradoresRouter from './routes/colaboradores.js';
 import periodosRouter from './routes/periodos.js';
@@ -71,13 +71,13 @@ export function createApp() {
   app.use('/api', usuariosRouter);
 
   // Contratos próximos a vencer
-  app.get('/api/contratos/proximos-vencer', requireAuth, async (_req, res) => {
+  app.get('/api/contratos/proximos-vencer', requireAuth, requireRole(['ADMIN', 'RRHH']), async (_req, res) => {
     const { rows } = await pool.query('SELECT * FROM contratos_proximos_vencer ORDER BY fecha_fin');
     res.json(rows);
   });
 
   // Actualizar contrato
-  app.patch('/api/colaboradores/:colaboradorId/contratos/:contratoId', requireAuth, async (req, res) => {
+  app.patch('/api/colaboradores/:colaboradorId/contratos/:contratoId', requireAuth, requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     const { colaboradorId, contratoId } = req.params;
     const permitidos = ['sueldo_base', 'fecha_inicio', 'fecha_fin', 'tipo_contrato', 'notas'];
     const updates = [];
