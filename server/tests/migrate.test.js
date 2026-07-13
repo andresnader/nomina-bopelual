@@ -14,7 +14,8 @@ describe('migraciones', () => {
     const nombres = rows.map((r) => r.table_name);
     for (const t of [
       'colaboradores', 'contratos', 'periodos', 'roles_pago', 'lineas_rol',
-      'provisiones', 'prestamos', 'facturas_proveedor', 'usuarios', 'parametros'
+      'provisiones', 'prestamos', 'facturas_proveedor', 'usuarios', 'parametros',
+      'contrato_emisiones'
     ]) {
       expect(nombres).toContain(t);
     }

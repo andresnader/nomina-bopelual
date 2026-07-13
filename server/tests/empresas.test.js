@@ -23,6 +23,19 @@ describe('config_empresas', () => {
     expect(cya.aplica_retencion).toBe(false);
   });
 
+  it('viene sembrado con datos legales para emitir contratos', async () => {
+    const app = createApp();
+    const res = await auth(request(app).get('/api/empresas'));
+    const bop = res.body.find((e) => e.empresa === 'BOPELUAL S.A.');
+    const cya = res.body.find((e) => e.empresa === 'CARROS-YA S.A.');
+    expect(bop.ruc).toBe('0993316237001');
+    expect(bop.representante_legal).toBe('Miguel Velez Pérez');
+    expect(bop.cedula_representante).toBe('0911764975');
+    expect(cya.ruc).toBe('0993074357001');
+    expect(cya.representante_legal).toBe('Alejandro Boloña Baux');
+    expect(cya.cedula_representante).toBe('0920303997');
+  });
+
   it('ADMIN puede activar la retención de una empresa', async () => {
     const app = createApp();
     const upd = await auth(
