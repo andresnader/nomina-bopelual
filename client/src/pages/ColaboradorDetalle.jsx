@@ -9,7 +9,7 @@ import { money, fecha } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { AbonoModal, CuotaModal } from './Prestamos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
-import { useConfirm } from '../components/Modal.jsx';
+import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
