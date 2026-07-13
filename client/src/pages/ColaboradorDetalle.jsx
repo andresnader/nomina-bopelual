@@ -137,6 +137,129 @@ function FichaTab({ col, onGuardado, onError }) {
   );
 }
 
+function EmitirContratoModal({ contrato, colaboradorId, onClose, onEmitido, onError }) {
+  const [form, setForm] = useState({
+    funciones: '', remuneracion_letras: '', horas_semanales: '', horas_diarias: '',
+    dias_descanso: '', duracion_texto: '', periodo_prueba_texto: '',
+  });
+  const [enviando, setEnviando] = useState(false);
+
+  const campo = (k, props = {}) => (
+    <input className="input w-full" value={form[k]} {...props}
+      onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+  );
+
+  const emitir = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+    try {
+      await api.post(`/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones`, form);
+      onEmitido();
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Emitir contrato productivo" size="lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+          <button form="form-emitir-contrato" disabled={enviando} className="btn btn-primary">
+            {enviando ? 'Generando…' : 'Generar y descargar'}
+          </button>
+        </>
+      }>
+      <form id="form-emitir-contrato" onSubmit={emitir} className="grid gap-3">
+        <label className="text-sm text-slate-600">Funciones del cargo (una por línea)
+          <textarea required rows={4} className="input w-full"
+            value={form.funciones} onChange={(e) => setForm({ ...form, funciones: e.target.value })} />
+        </label>
+        <label className="text-sm text-slate-600">Remuneración en letras (ej. SEISCIENTOS 00/100)
+          {campo('remuneracion_letras', { required: true })}
+        </label>
+        <div className="grid md:grid-cols-3 gap-3">
+          <label className="text-sm text-slate-600">Horas semanales (ej. cuarenta)
+            {campo('horas_semanales', { required: true })}
+          </label>
+          <label className="text-sm text-slate-600">Horas diarias (ej. Ocho)
+            {campo('horas_diarias', { required: true })}
+          </label>
+          <label className="text-sm text-slate-600">Días de descanso (ej. Dos)
+            {campo('dias_descanso', { required: true })}
+          </label>
+        </div>
+        <label className="text-sm text-slate-600">Duración del contrato
+          {campo('duracion_texto', { required: true })}
+        </label>
+        <label className="text-sm text-slate-600">Período de prueba
+          {campo('periodo_prueba_texto', { required: true })}
+        </label>
+      </form>
+    </Modal>
+  );
+}
+
+function EmisionCell({ contrato, colaboradorId, onCambio, onError }) {
+  const [modalAbierto, setModalAbierto] = useState(false);
+  if (contrato.tipo_contrato !== 'PRODUCTIVO') {
+    return <span className="text-slate-400 text-xs" title="Plantilla no disponible aún">—</span>;
+  }
+
+  const subirFirmado = async (emisionId, e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    if (archivo.size > 5 * 1024 * 1024) return onError('El archivo supera los 5 MB');
+    const res = await fetch(
+      `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${emisionId}/firmado`,
+      { method: 'POST', credentials: 'include', headers: { 'Content-Type': archivo.type || 'application/octet-stream' }, body: archivo }
+    );
+    if (!res.ok) return onError((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    e.target.value = '';
+    onCambio();
+  };
+
+  const ultima = contrato.emisiones?.[0];
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {ultima && (
+        <a href={`/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${ultima.id}/generado`}
+          className="text-xs text-gold-600 hover:underline flex items-center gap-1">
+          <Download size={12} /> Generado
+        </a>
+      )}
+      {ultima && (
+        ultima.archivo_firmado_key ? (
+          <a href={`/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${ultima.id}/firmado`}
+            className="text-xs text-emerald-700 hover:underline flex items-center gap-1">
+            <Download size={12} /> Firmado
+          </a>
+        ) : (
+          <label className="text-xs text-slate-500 cursor-pointer hover:text-gold-600">
+            Subir firmado
+            <input type="file" className="hidden" onChange={(e) => subirFirmado(ultima.id, e)} />
+          </label>
+        )
+      )}
+      <button type="button" onClick={() => setModalAbierto(true)} className="text-xs text-slate-500 hover:text-gold-600">
+        {ultima ? 'Reemitir' : 'Emitir contrato'}
+      </button>
+      {modalAbierto && (
+        <EmitirContratoModal
+          contrato={contrato}
+          colaboradorId={colaboradorId}
+          onClose={() => setModalAbierto(false)}
+          onEmitido={() => { setModalAbierto(false); onCambio(); }}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
 function ContratosTab({ col, onCambio, onError }) {
   const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
   const [tiposContrato, setTiposContrato] = useState([]);
@@ -181,7 +304,7 @@ function ContratosTab({ col, onCambio, onError }) {
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
-              <th className="p-3">Sueldo</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th>
+              <th className="p-3">Sueldo</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th><th className="p-3">Emisión</th>
             </tr>
           </thead>
           <tbody>
@@ -192,6 +315,9 @@ function ContratosTab({ col, onCambio, onError }) {
                 <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
                 <td className="p-3">{tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? '—'}</td>
                 <td className="p-3 text-slate-500">{c.notas || '—'}</td>
+                <td className="p-3">
+                  <EmisionCell contrato={c} colaboradorId={col.id} onCambio={onCambio} onError={onError} />
+                </td>
               </tr>
             ))}
           </tbody>
