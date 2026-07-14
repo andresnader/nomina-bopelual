@@ -122,18 +122,20 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
             <td className="p-3 text-slate-500">{a.motivo || '—'}</td>
             {gestionable && (
               <td className="p-3 text-right whitespace-nowrap">
-                {a.estado === 'SOLICITADA' && (
-                  <RoleGate roles={['ADMIN', 'RRHH']}>
-                    <button onClick={() => setEditando({ ...a, fecha_desde: a.fecha_desde?.slice(0, 10), fecha_hasta: a.fecha_hasta?.slice(0, 10) })}
-                      title="Editar" className="text-slate-400 hover:text-gold-600 rounded p-1.5"><Pencil size={16} /></button>
-                    <button onClick={() => decidir(a, 'aprobar')} title="Aprobar"
-                      className="text-emerald-600 hover:bg-emerald-50 rounded p-1.5"><Check size={16} /></button>
-                    <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
-                      className="text-red-600 hover:bg-red-50 rounded p-1.5"><X size={16} /></button>
-                    <button onClick={() => eliminar(a)} title="Eliminar"
-                      className="text-slate-400 hover:text-red-500 rounded p-1.5"><Trash2 size={16} /></button>
-                  </RoleGate>
-                )}
+                <RoleGate roles={['ADMIN', 'RRHH']}>
+                  {a.estado === 'SOLICITADA' && (
+                    <>
+                      <button onClick={() => setEditando({ ...a, fecha_desde: a.fecha_desde?.slice(0, 10), fecha_hasta: a.fecha_hasta?.slice(0, 10) })}
+                        title="Editar" className="text-slate-400 hover:text-gold-600 rounded p-1.5"><Pencil size={16} /></button>
+                      <button onClick={() => decidir(a, 'aprobar')} title="Aprobar"
+                        className="text-emerald-600 hover:bg-emerald-50 rounded p-1.5"><Check size={16} /></button>
+                      <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
+                        className="text-red-600 hover:bg-red-50 rounded p-1.5"><X size={16} /></button>
+                    </>
+                  )}
+                  <button onClick={() => eliminar(a)} title="Eliminar"
+                    className="text-slate-400 hover:text-red-500 rounded p-1.5"><Trash2 size={16} /></button>
+                </RoleGate>
               </td>
             )}
           </tr>
