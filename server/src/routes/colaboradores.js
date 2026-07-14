@@ -116,7 +116,8 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
-    'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario'
+    'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
+    'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal'
   ];
   const set = [];
   const params = [];
@@ -185,6 +186,70 @@ router.delete('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN']), a
   const { rowCount } = await pool.query('DELETE FROM contratos WHERE id=$1 AND colaborador_id=$2', [
     req.params.contratoId, req.params.colaboradorId
   ]);
+  if (rowCount === 0) return res.status(404).json({ error: 'no encontrado' });
+  res.json({ ok: true });
+});
+
+// ── Rubros de Ingreso Proyectados ──────────────────────────────────
+const RUBROS_INGRESO_TIPOS = ['SUELDO', 'ALIMENTACION', 'TRANSPORTE', 'VIVIENDA', 'COMISIONES', 'HORAS_EXTRA', 'BONO', 'OTROS'];
+
+// Listar rubros de ingreso de un colaborador.
+router.get('/:id/rubros-ingreso', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 ORDER BY tipo, creado_en',
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// Crear rubro de ingreso.
+router.post('/:id/rubros-ingreso', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { tipo, valor_mensual, deducible, afecta_aportacion, descripcion } = req.body;
+  if (!tipo || valor_mensual == null) {
+    return res.status(400).json({ error: 'tipo y valor_mensual requeridos' });
+  }
+  if (!RUBROS_INGRESO_TIPOS.includes(tipo)) {
+    return res.status(400).json({ error: `tipo desconocido: ${tipo}. Válidos: ${RUBROS_INGRESO_TIPOS.join(', ')}` });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO rubros_ingreso (colaborador_id, tipo, valor_mensual, deducible, afecta_aportacion, descripcion)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.params.id, tipo, valor_mensual, deducible ?? true, afecta_aportacion ?? true, descripcion ?? null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Actualizar rubro de ingreso.
+router.patch('/:colaboradorId/rubros-ingreso/:rubroId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const campos = ['tipo', 'valor_mensual', 'deducible', 'afecta_aportacion', 'descripcion', 'activo'];
+  const set = [];
+  const params = [];
+  for (const c of campos) {
+    if (c in req.body) {
+      params.push(req.body[c]);
+      set.push(`${c}=$${params.length}`);
+    }
+  }
+  if (set.length === 0) return res.status(400).json({ error: 'nada que actualizar' });
+  params.push(req.params.rubroId, req.params.colaboradorId);
+  const { rows } = await pool.query(
+    `UPDATE rubros_ingreso SET ${set.join(', ')} WHERE id=$${params.length - 1} AND colaborador_id=$${params.length} RETURNING *`,
+    params
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
+  res.json(rows[0]);
+});
+
+// Eliminar rubro de ingreso.
+router.delete('/:colaboradorId/rubros-ingreso/:rubroId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { rowCount } = await pool.query(
+    'DELETE FROM rubros_ingreso WHERE id=$1 AND colaborador_id=$2',
+    [req.params.rubroId, req.params.colaboradorId]
+  );
   if (rowCount === 0) return res.status(404).json({ error: 'no encontrado' });
   res.json({ ok: true });
 });

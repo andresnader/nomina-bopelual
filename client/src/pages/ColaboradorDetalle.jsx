@@ -13,7 +13,7 @@ import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
-const TABS_BASE = ['Ficha', 'Horario', 'Contratos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
+const TABS_BASE = ['Ficha', 'Horario', 'Contratos', 'Ingresos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
@@ -32,6 +32,9 @@ function FichaTab({ col, onGuardado, onError }) {
     fecha_nacimiento: col.fecha_nacimiento?.slice(0, 10) ?? '', sexo: col.sexo ?? '',
     estado_civil: col.estado_civil ?? '', direccion: col.direccion ?? '',
     horario: col.horario ?? '',
+    acumular_decimos: col.acumular_decimos ?? true,
+    acumular_fondos_reserva: col.acumular_fondos_reserva ?? false,
+    extension_conyugal: col.extension_conyugal ?? false,
   });
 
   const guardar = async (e) => {
@@ -112,6 +115,30 @@ function FichaTab({ col, onGuardado, onError }) {
               <option value="0.5">50% / 50%</option>
               <option value="0.6">60% / 40%</option>
             </select>
+          </label>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="font-semibold mb-3">Configuración laboral</h2>
+        <div className="grid md:grid-cols-3 gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" className="h-4 w-4 rounded border-slate-300"
+              checked={form.acumular_decimos}
+              onChange={(e) => setForm({ ...form, acumular_decimos: e.target.checked })} />
+            Acumular décimos (provisión mensual)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" className="h-4 w-4 rounded border-slate-300"
+              checked={form.acumular_fondos_reserva}
+              onChange={(e) => setForm({ ...form, acumular_fondos_reserva: e.target.checked })} />
+            Acumular fondos de reserva desde el Año
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" className="h-4 w-4 rounded border-slate-300"
+              checked={form.extension_conyugal}
+              onChange={(e) => setForm({ ...form, extension_conyugal: e.target.checked })} />
+            Extensión conyugal (10% adicional IESS)
           </label>
         </div>
       </Card>
@@ -398,6 +425,173 @@ function ContratosTab({ col, onCambio, onError }) {
             ))}
           </tbody>
         </table>
+      </Card>
+    </div>
+  );
+}
+
+const RUBROS_TIPO = [
+  { value: 'SUELDO', label: 'Sueldo' },
+  { value: 'ALIMENTACION', label: 'Alimentación' },
+  { value: 'TRANSPORTE', label: 'Transporte' },
+  { value: 'VIVIENDA', label: 'Vivienda' },
+  { value: 'COMISIONES', label: 'Comisiones' },
+  { value: 'HORAS_EXTRA', label: 'Horas extra' },
+  { value: 'BONO', label: 'Bono' },
+  { value: 'OTROS', label: 'Otros' },
+];
+
+function RubrosIngresosTab({ col, onError }) {
+  const [rubros, setRubros] = useState([]);
+  const [form, setForm] = useState({ tipo: 'SUELDO', valor_mensual: '', descripcion: '', deducible: true, afecta_aportacion: true });
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  const cargar = () => api.get(`/colaboradores/${col.id}/rubros-ingreso`).then(setRubros).catch((e) => onError(e.message));
+  useEffect(() => { cargar(); }, [col.id]);
+
+  const crear = async (e) => {
+    e.preventDefault();
+    if (!form.valor_mensual) return onError('El valor mensual es requerido');
+    try {
+      await api.post(`/colaboradores/${col.id}/rubros-ingreso`, {
+        ...form,
+        valor_mensual: Number(form.valor_mensual),
+      });
+      setForm({ tipo: 'SUELDO', valor_mensual: '', descripcion: '', deducible: true, afecta_aportacion: true });
+      cargar();
+    } catch (e) { onError(e.message); }
+  };
+
+  const guardarEdit = async (rubroId) => {
+    try {
+      await api.patch(`/colaboradores/${col.id}/rubros-ingreso/${rubroId}`, {
+        ...editForm,
+        valor_mensual: editForm.valor_mensual != null ? Number(editForm.valor_mensual) : undefined,
+      });
+      setEditId(null);
+      cargar();
+    } catch (e) { onError(e.message); }
+  };
+
+  const eliminar = async (rubroId) => {
+    if (!window.confirm('¿Eliminar este rubro de ingreso?')) return;
+    try {
+      await api.del(`/colaboradores/${col.id}/rubros-ingreso/${rubroId}`);
+      cargar();
+    } catch (e) { onError(e.message); }
+  };
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <h2 className="font-semibold mb-3">Nuevo rubro de ingreso proyectado</h2>
+        <form onSubmit={crear} className="grid md:grid-cols-4 gap-3 items-end">
+          <label className="text-sm text-slate-600">Tipo
+            <select className="input w-full" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+              {RUBROS_TIPO.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">Valor mensual ($)
+            <input className="input w-full" type="number" min="0" step="0.01" value={form.valor_mensual}
+              onChange={(e) => setForm({ ...form, valor_mensual: e.target.value })} required />
+          </label>
+          <label className="text-sm text-slate-600">Descripción
+            <input className="input w-full" value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Opcional" />
+          </label>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-1">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={form.deducible}
+                onChange={(e) => setForm({ ...form, deducible: e.target.checked })} />
+              Deducible
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={form.afecta_aportacion}
+                onChange={(e) => setForm({ ...form, afecta_aportacion: e.target.checked })} />
+              Afecta aportación
+            </label>
+          </div>
+          <button className="btn-primary" type="submit">Agregar</button>
+        </form>
+      </Card>
+
+      <Card className="p-0 overflow-x-auto">
+        <table className="text-sm w-full">
+          <thead>
+            <tr className="border-b border-slate-200 text-left">
+              <th className="p-3 font-medium">Tipo</th>
+              <th className="p-3 font-medium">Valor mensual</th>
+              <th className="p-3 font-medium">Deducible</th>
+              <th className="p-3 font-medium">Afecta aport.</th>
+              <th className="p-3 font-medium">Descripción</th>
+              <th className="p-3 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rubros.length === 0 && (
+              <tr><td colSpan={6} className="p-4 text-center text-slate-400">No hay rubros registrados</td></tr>
+            )}
+            {rubros.map((r) => (
+              <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                {editId === r.id ? (
+                  <>
+                    <td className="p-2">
+                      <select className="input w-full" value={editForm.tipo ?? r.tipo}
+                        onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}>
+                        {RUBROS_TIPO.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input className="input w-full" type="number" min="0" step="0.01"
+                        value={editForm.valor_mensual ?? r.valor_mensual}
+                        onChange={(e) => setEditForm({ ...editForm, valor_mensual: e.target.value })} />
+                    </td>
+                    <td className="p-2 text-center">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300"
+                        checked={editForm.deducible ?? r.deducible}
+                        onChange={(e) => setEditForm({ ...editForm, deducible: e.target.checked })} />
+                    </td>
+                    <td className="p-2 text-center">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300"
+                        checked={editForm.afecta_aportacion ?? r.afecta_aportacion}
+                        onChange={(e) => setEditForm({ ...editForm, afecta_aportacion: e.target.checked })} />
+                    </td>
+                    <td className="p-2">
+                      <input className="input w-full" value={editForm.descripcion ?? r.descripcion ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} />
+                    </td>
+                    <td className="p-2 flex gap-1">
+                      <button className="text-xs text-emerald-600 hover:underline" onClick={() => guardarEdit(r.id)}>Guardar</button>
+                      <button className="text-xs text-slate-400 hover:underline" onClick={() => { setEditId(null); setEditForm({}); }}>Cancelar</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="p-3">{RUBROS_TIPO.find((t) => t.value === r.tipo)?.label ?? r.tipo}</td>
+                    <td className="p-3 font-mono">{money(r.valor_mensual)}</td>
+                    <td className="p-3 text-center">{r.deducible ? '✓' : '—'}</td>
+                    <td className="p-3 text-center">{r.afecta_aportacion ? '✓' : '—'}</td>
+                    <td className="p-3 text-slate-500">{r.descripcion || '—'}</td>
+                    <td className="p-3 flex gap-2">
+                      <button className="text-slate-400 hover:text-slate-600" onClick={() => { setEditId(r.id); setEditForm({}); }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="text-slate-400 hover:text-red-500" onClick={() => eliminar(r.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rubros.length > 0 && (
+          <div className="p-3 border-t border-slate-200 text-right text-sm font-medium">
+            Total mensual: {money(rubros.filter((r) => r.activo !== false).reduce((s, r) => s + Number(r.valor_mensual), 0))}
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -1185,6 +1379,7 @@ export default function ColaboradorDetalle() {
       {tab === 'Ficha' && <FichaTab col={col} onGuardado={() => { setError(null); cargar(); }} onError={setError} />}
       {tab === 'Horario' && <HorarioTab col={col} onError={setError} onCambio={() => { setError(null); cargar(); }} />}
       {tab === 'Contratos' && <ContratosTab col={col} onCambio={() => { setError(null); cargar(); }} onError={setError} />}
+      {tab === 'Ingresos' && <RubrosIngresosTab col={col} onError={setError} />}
       {tab === 'Descuentos' && <DescuentosTab col={col} onError={setError} />}
       {tab === 'Préstamos' && <PrestamosTab col={col} onError={setError} />}
       {tab === 'Anticipos' && <AnticiposTab col={col} onError={setError} />}

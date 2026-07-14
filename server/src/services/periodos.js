@@ -22,7 +22,7 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
 
 // Restaura las líneas de sueldo base (ingresos y descuentos fijos) si fueron
 // eliminadas accidentalmente de un rol. Reconstituye exactamente lo que
-// generarRoles crea: anticipo/sueldo, IESS, décimos y fondos de reserva.
+// generarRoles crea: anticipo/sueldo, IESS, décimos, fondos de reserva y rubros de ingreso.
 // Reutilizable desde sincronizarPeriodo y /roles/:id/sincronizar.
 export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quincena, periodoFechaFin) {
   // Obtener datos del colaborador y su contrato vigente.
@@ -50,8 +50,9 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
   // Verificar qué líneas de sueldo ya existen en el rol.
   const { rows: existentes } = await client.query(
     `SELECT tipo_linea FROM lineas_rol WHERE rol_pago_id=$1
-     AND tipo_linea IN ('ANTICIPO_QUINCENA','SUELDO_BASE','IESS_PERSONAL',
-       'DECIMO_TERCERO','DECIMO_CUARTO','FONDOS_RESERVA','BONO')`,
+     AND (tipo_linea IN ('ANTICIPO_QUINCENA','SUELDO_BASE','IESS_PERSONAL',
+       'DECIMO_TERCERO','DECIMO_CUARTO','FONDOS_RESERVA','BONO')
+       OR tipo_linea LIKE 'RUBRO_%')`,
     [rolId]
   );
   const tipos = new Set(existentes.map((e) => e.tipo_linea));
@@ -117,6 +118,27 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
       }
     }
   }
+
+  // ── Rubros de Ingreso Proyectados ──────────────────────────────────
+  const { rows: rubros } = await client.query(
+    `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
+    [colaboradorId]
+  );
+  for (const rubro of rubros) {
+    const tipoRubro = `RUBRO_${rubro.tipo}`;
+    if (tipos.has(tipoRubro)) continue;
+    const montoMensual = Number(rubro.valor_mensual);
+    if (montoMensual <= 0) continue;
+    const monto = quincena === 1 ? round2(montoMensual * pct) : round2(montoMensual * (1 - pct));
+    if (monto > 0) {
+      await insertarLinea(client, rolId, {
+        tipo: tipoRubro, clase: 'INGRESO', monto,
+        desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})`
+      });
+      agregadas++;
+    }
+  }
+
   return agregadas;
 }
 
@@ -280,6 +302,23 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
           tipo: 'FONDOS_RESERVA', clase: 'INGRESO',
           monto: calc.fondosReserva(sueldo, 999),
           desc: 'Fondos de reserva'
+        });
+      }
+    }
+
+    // ── Rubros de Ingreso Proyectados ──────────────────────────────────
+    const { rows: rubros } = await client.query(
+      `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
+      [col.id]
+    );
+    for (const rubro of rubros) {
+      const montoMensual = Number(rubro.valor_mensual);
+      if (montoMensual <= 0) continue;
+      const monto = quincena === 1 ? round2(montoMensual * pct) : round2(montoMensual * (1 - pct));
+      if (monto > 0) {
+        await insertarLinea(client, rolId, {
+          tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
+          desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})`
         });
       }
     }
