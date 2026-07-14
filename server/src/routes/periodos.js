@@ -50,7 +50,7 @@ router.get('/:id', requireRole(['ADMIN', 'RRHH', 'GERENCIA']), async (req, res) 
   const { rows: p } = await pool.query('SELECT * FROM periodos WHERE id=$1', [req.params.id]);
   if (p.length === 0) return res.status(404).json({ error: 'no encontrado' });
   const { rows: roles } = await pool.query(
-    `SELECT rp.*, c.nombre AS colaborador_nombre, c.tipo AS colaborador_tipo
+    `SELECT rp.*, c.nombre AS colaborador_nombre, c.tipo AS colaborador_tipo, c.empresa AS colaborador_empresa
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
      WHERE rp.periodo_id=$1 ORDER BY c.nombre`,
     [req.params.id]

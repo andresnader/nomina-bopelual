@@ -18,8 +18,7 @@ const GRUPOS = [
 ];
 
 // Descarga por grupo el archivo de pago masivo Cash Management (Banco Pichincha).
-function ExportarTxtBanco({ periodoId }) {
-  const [empresa, setEmpresa] = useState('');
+function ExportarTxtBanco({ periodoId, empresa }) {
   const [aviso, setAviso] = useState(null);
 
   const descargar = async (grupo) => {
@@ -44,9 +43,6 @@ function ExportarTxtBanco({ periodoId }) {
           <h2 className="font-semibold">Archivos de pago — Banco Pichincha</h2>
           <p className="text-sm text-muted">TXT Cash Management para transferencias masivas</p>
         </div>
-        <select className="input" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
-          {EMPRESAS.map((e) => <option key={e} value={e}>{e || 'Ambas empresas'}</option>)}
-        </select>
       </div>
       <div className="flex flex-wrap gap-2 mt-4">
         {GRUPOS.map((g) => (
@@ -79,6 +75,7 @@ export default function PeriodoDetalle() {
   const { id } = useParams();
   const [periodo, setPeriodo] = useState(null);
   const [error, setError] = useState(null);
+  const [empresa, setEmpresa] = useState('');
   const toast = useToast();
 
   const cargar = () => api.get(`/periodos/${id}`).then(setPeriodo).catch((e) => setError(e.message));
@@ -143,14 +140,30 @@ export default function PeriodoDetalle() {
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <RoleGate roles={['ADMIN', 'RRHH']}>
-        <ExportarTxtBanco periodoId={id} />
+        <ExportarTxtBanco periodoId={id} empresa={empresa} />
       </RoleGate>
+
+      <Card className="mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="font-semibold">Colaboradores del período</h2>
+            <p className="text-sm text-muted">Filtra los roles de pago por empresa para revisar sus nóminas</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted">Empresa</label>
+            <select className="input" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+              {EMPRESAS.map((e) => <option key={e} value={e}>{e || 'Ambas empresas'}</option>)}
+            </select>
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Colaborador</th>
+              <th className="p-3">Empresa</th>
               <th className="p-3">Tipo</th>
               <th className="p-3 text-right">Ingresos</th>
               <th className="p-3 text-right">Descuentos</th>
@@ -159,13 +172,16 @@ export default function PeriodoDetalle() {
             </tr>
           </thead>
           <tbody>
-            {periodo.roles_pago.map((r) => (
+            {periodo.roles_pago
+              .filter((r) => !empresa || r.colaborador_empresa === empresa)
+              .map((r) => (
               <tr key={r.id} className="border-b border-slate-200 hover:bg-slate-50">
                 <td className="p-3">
                   <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">
                     {r.colaborador_nombre}
                   </Link>
                 </td>
+                <td className="p-3 text-slate-600">{r.colaborador_empresa || '—'}</td>
                 <td className="p-3"><Badge estado={r.colaborador_tipo} /></td>
                 <td className="p-3 text-right">{money(r.total_ingresos)}</td>
                 <td className="p-3 text-right">{money(r.total_descuentos)}</td>
@@ -173,6 +189,11 @@ export default function PeriodoDetalle() {
                 <td className="p-3"><Badge estado={r.estado_pago} /></td>
               </tr>
             ))}
+            {periodo.roles_pago.filter((r) => !empresa || r.colaborador_empresa === empresa).length === 0 && (
+              <tr>
+                <td colSpan={7} className="p-8 text-center text-slate-500">No hay colaboradores para el filtro seleccionado</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </Card>
