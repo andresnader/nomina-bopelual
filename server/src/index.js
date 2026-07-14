@@ -24,6 +24,7 @@ import evaluacionesRouter from './routes/evaluaciones.js';
 import contratoEmisionesRouter from './routes/contrato-emisiones.js';
 import contratoEmisionesAvanzadasRouter from './routes/contrato-emisiones-avanzadas.js';
 import colaboradorDocumentosRouter from './routes/colaborador-documentos.js';
+import horariosRouter from './routes/horarios.js';
 import pool from './db/pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,7 @@ export function createApp() {
   // Path distinto de /documentos (arriba): documentosRouter ya define GET/:docId,
   // que interceptaría cualquier :tipo (ej. 'confidencialidad') como si fuera un docId.
   app.use('/api/colaboradores/:colaboradorId/documentos-emitidos', colaboradorDocumentosRouter);
+  app.use('/api/horarios', horariosRouter);
   app.use('/api', usuariosRouter);
 
   // Contratos próximos a vencer

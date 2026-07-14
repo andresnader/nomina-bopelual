@@ -74,7 +74,7 @@ router.get(
     const [contratos, rolesPago, prestamos, emisiones] = await Promise.all([
       pool.query('SELECT * FROM contratos WHERE colaborador_id=$1 ORDER BY fecha_inicio DESC', [req.params.id]),
       pool.query(
-        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha
+        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha, p.estado AS periodo_estado
          FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
          WHERE rp.colaborador_id=$1 ORDER BY p.fecha_inicio DESC`,
         [req.params.id]
@@ -116,7 +116,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
-    'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion'
+    'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario'
   ];
   const set = [];
   const params = [];
