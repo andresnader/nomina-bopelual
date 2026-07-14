@@ -76,8 +76,22 @@ router.patch('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  await pool.query('DELETE FROM descuentos_recurrentes WHERE id=$1', [req.params.id]);
-  res.json({ ok: true });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'UPDATE lineas_rol SET descuento_recurrente_id = NULL WHERE descuento_recurrente_id = $1',
+      [req.params.id]
+    );
+    await client.query('DELETE FROM descuentos_recurrentes WHERE id = $1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(409).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 export default router;
