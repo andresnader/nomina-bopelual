@@ -123,5 +123,5 @@ if (process.argv[1] && process.argv[1].endsWith('index.js')) {
     );
   }
 
-  createApp().listen(PORT, () => console.log(`API en :${PORT}`));
+  createApp().listen(PORT, '0.0.0.0', () => console.log(`API en :${PORT}`));
 }
