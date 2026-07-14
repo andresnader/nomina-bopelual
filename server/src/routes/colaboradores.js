@@ -174,15 +174,6 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
 
 // Eliminar un contrato (solo si no tiene roles de pago asociados).
 router.delete('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN']), async (req, res) => {
-  const { rows:vinculos } = await pool.query(
-    `SELECT rp.id FROM roles_pago rp
-     JOIN periodos p ON p.id=rp.periodo_id
-     WHERE rp.colaborador_id=$1 AND p.fecha_inicio >= (SELECT fecha_inicio FROM contratos WHERE id=$2)`,
-    [req.params.colaboradorId, req.params.contratoId]
-  );
-  if (vinculos.length > 0) {
-    return res.status(409).json({ error: 'No se puede eliminar: el contrato tiene roles de pago asociados' });
-  }
   const { rowCount } = await pool.query('DELETE FROM contratos WHERE id=$1 AND colaborador_id=$2', [
     req.params.contratoId, req.params.colaboradorId
   ]);
