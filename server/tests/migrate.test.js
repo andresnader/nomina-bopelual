@@ -17,7 +17,7 @@ describe('migraciones', () => {
       'provisiones', 'prestamos', 'facturas_proveedor', 'usuarios', 'parametros',
       'contrato_emisiones', 'colaborador_confidencialidad', 'colaborador_consentimiento_expreso',
       'colaborador_consentimiento_biometrico', 'contrato_comisionista_emisiones',
-      'contrato_servicios_profesionales_emisiones'
+      'contrato_servicios_profesionales_emisiones', 'horarios', 'incidencias_horario'
     ]) {
       expect(nombres).toContain(t);
     }
