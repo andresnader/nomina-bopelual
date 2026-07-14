@@ -72,6 +72,19 @@ router.delete('/:rolId/lineas/:lineaId', requireRole(['ADMIN', 'RRHH']), async (
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT descuento_recurrente_id, prestamo_id FROM lineas_rol WHERE id=$1 AND rol_pago_id=$2',
+      [req.params.lineaId, req.params.rolId]
+    );
+    if (rows.length > 0) {
+      const { descuento_recurrente_id, prestamo_id } = rows[0];
+      if (descuento_recurrente_id) {
+        await client.query('UPDATE descuentos_recurrentes SET activo=false WHERE id=$1', [descuento_recurrente_id]);
+      }
+      if (prestamo_id) {
+        await client.query('UPDATE prestamos SET activo=false WHERE id=$1 AND saldo_pendiente <= 0', [prestamo_id]);
+      }
+    }
     await client.query('DELETE FROM lineas_rol WHERE id=$1 AND rol_pago_id=$2', [
       req.params.lineaId,
       req.params.rolId
