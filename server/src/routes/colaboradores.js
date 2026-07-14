@@ -181,6 +181,30 @@ router.delete('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN']), a
   res.json({ ok: true });
 });
 
+// Editar un contrato existente (sueldo, bono, fechas, notas, tipo).
+router.patch('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const campos = ['sueldo_base', 'bono', 'fecha_inicio', 'fecha_fin', 'notas', 'tipo_contrato'];
+  const set = [];
+  const params = [];
+  for (const c of campos) {
+    if (c in req.body) {
+      params.push(req.body[c]);
+      set.push(`${c}=$${params.length}`);
+    }
+  }
+  if (set.length === 0) return res.status(400).json({ error: 'nada que actualizar' });
+  if (req.body.tipo_contrato && !(await esTipoContratoValido(req.body.tipo_contrato))) {
+    return res.status(400).json({ error: `tipo_contrato desconocido: ${req.body.tipo_contrato}` });
+  }
+  params.push(req.params.contratoId, req.params.colaboradorId);
+  const { rows } = await pool.query(
+    `UPDATE contratos SET ${set.join(', ')} WHERE id=$${params.length - 1} AND colaborador_id=$${params.length} RETURNING *`,
+    params
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
+  res.json(rows[0]);
+});
+
 // ── Rubros de Ingreso Proyectados ──────────────────────────────────
 const RUBROS_INGRESO_TIPOS = ['SUELDO', 'ALIMENTACION', 'TRANSPORTE', 'VIVIENDA', 'COMISIONES', 'HORAS_EXTRA', 'BONO', 'OTROS'];
 

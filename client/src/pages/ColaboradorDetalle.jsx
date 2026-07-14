@@ -347,6 +347,8 @@ function EmisionCell({ contrato, colaboradorId, onCambio, onError }) {
 function ContratosTab({ col, onCambio, onError }) {
   const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '', bono: '' });
   const [tiposContrato, setTiposContrato] = useState([]);
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
   useEffect(() => {
     api.get('/tipos-contrato').then(setTiposContrato).catch(() => {});
   }, []);
@@ -364,6 +366,20 @@ function ContratosTab({ col, onCambio, onError }) {
     } catch (err) {
       onError(err.message);
     }
+  };
+
+  const guardarEdicion = async (c) => {
+    try {
+      await api.patch(`/colaboradores/${col.id}/contratos/${c.id}`, {
+        sueldo_base: Number(editForm.sueldo_base ?? c.sueldo_base),
+        bono: editForm.bono != null ? Number(editForm.bono) : c.bono,
+        fecha_inicio: editForm.fecha_inicio ?? c.fecha_inicio,
+        notas: editForm.notas ?? c.notas,
+        tipo_contrato: editForm.tipo_contrato ?? c.tipo_contrato,
+      });
+      setEditId(null);
+      onCambio();
+    } catch (err) { onError(err.message); }
   };
 
   return (
@@ -397,30 +413,63 @@ function ContratosTab({ col, onCambio, onError }) {
           <tbody>
             {col.contratos.map((c) => (
               <tr key={c.id} className="border-b border-slate-200">
-                <td className="p-3 font-medium">{money(c.sueldo_base)}</td>
-                <td className="p-3">{c.bono ? money(c.bono) : '—'}</td>
-                <td className="p-3">{fecha(c.fecha_inicio)}</td>
-                <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
-                <td className="p-3">{tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? '—'}</td>
-                <td className="p-3 text-slate-500">{c.notas || '—'}</td>
-                <td className="p-3">
-                  <EmisionCell contrato={c} colaboradorId={col.id} onCambio={onCambio} onError={onError} />
-                </td>
-                <td className="p-3">
-                  <button
-                    className="text-red-500 hover:text-red-700 text-xs"
-                    title="Eliminar contrato"
-                    onClick={async () => {
-                      if (!confirm('¿Eliminar este contrato?')) return;
-                      try {
-                        await api.del(`/colaboradores/${col.id}/contratos/${c.id}`);
-                        onCambio();
-                      } catch (err) {
-                        onError(err.message);
-                      }
-                    }}
-                  >✕</button>
-                </td>
+                {editId === c.id ? (
+                  <>
+                    <td className="p-2">
+                      <input type="number" step="0.01" className="input w-full" value={editForm.sueldo_base ?? c.sueldo_base}
+                        onChange={(e) => setEditForm({ ...editForm, sueldo_base: e.target.value })} />
+                    </td>
+                    <td className="p-2">
+                      <input type="number" step="0.01" className="input w-full" value={editForm.bono ?? c.bono ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, bono: e.target.value })} />
+                    </td>
+                    <td className="p-2">
+                      <input type="date" className="input w-full" value={editForm.fecha_inicio ?? c.fecha_inicio?.slice(0, 10)}
+                        onChange={(e) => setEditForm({ ...editForm, fecha_inicio: e.target.value })} />
+                    </td>
+                    <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : '—'}</td>
+                    <td className="p-2">
+                      <select className="input w-full" value={editForm.tipo_contrato ?? c.tipo_contrato ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, tipo_contrato: e.target.value })}>
+                        <option value="">—</option>
+                        {tiposContrato.map((t) => <option key={t.codigo} value={t.codigo}>{t.nombre}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input className="input w-full" value={editForm.notas ?? c.notas ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} />
+                    </td>
+                    <td className="p-3"></td>
+                    <td className="p-3 flex gap-2">
+                      <button className="text-xs text-emerald-600 hover:underline" onClick={() => guardarEdicion(c)}>Guardar</button>
+                      <button className="text-xs text-slate-400 hover:underline" onClick={() => { setEditId(null); setEditForm({}); }}>Cancelar</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="p-3 font-medium">{money(c.sueldo_base)}</td>
+                    <td className="p-3">{c.bono ? money(c.bono) : '—'}</td>
+                    <td className="p-3">{fecha(c.fecha_inicio)}</td>
+                    <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
+                    <td className="p-3">{tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? '—'}</td>
+                    <td className="p-3 text-slate-500">{c.notas || '—'}</td>
+                    <td className="p-3">
+                      <EmisionCell contrato={c} colaboradorId={col.id} onCambio={onCambio} onError={onError} />
+                    </td>
+                    <td className="p-3 flex gap-2 items-center">
+                      <button className="text-slate-400 hover:text-gold-600" title="Editar"
+                        onClick={() => { setEditId(c.id); setEditForm({}); }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="text-red-500 hover:text-red-700 text-xs" title="Eliminar contrato"
+                        onClick={async () => {
+                          if (!confirm('¿Eliminar este contrato?')) return;
+                          try { await api.del(`/colaboradores/${col.id}/contratos/${c.id}`); onCambio(); }
+                          catch (err) { onError(err.message); }
+                        }}>✕</button>
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
