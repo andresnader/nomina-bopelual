@@ -163,8 +163,8 @@ router.post('/:id/abonos', async (req, res) => {
   }
 });
 
-// Eliminar solo préstamos sin pagos aplicados (ni cuotas de nómina ni abonos);
-// si ya tiene pagos, la vía correcta es precancelar (conserva la auditoría).
+// Eliminar préstamo: si no tiene pagos se borra físicamente; si ya tiene
+// pagos se desactiva (soft delete) para conservar la auditoría.
 router.delete('/:id', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT p.saldo_pendiente, p.monto_total,
@@ -173,11 +173,13 @@ router.delete('/:id', async (req, res) => {
     [req.params.id]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
-  if (rows[0].abonos > 0 || Number(rows[0].saldo_pendiente) < Number(rows[0].monto_total)) {
-    return res.status(409).json({ error: 'tiene pagos aplicados: usa precancelar en lugar de eliminar' });
+  const tienePagos = rows[0].abonos > 0 || Number(rows[0].saldo_pendiente) < Number(rows[0].monto_total);
+  if (tienePagos) {
+    await pool.query('UPDATE prestamos SET activo=false WHERE id=$1', [req.params.id]);
+  } else {
+    await pool.query('DELETE FROM prestamos WHERE id=$1', [req.params.id]);
   }
-  await pool.query('DELETE FROM prestamos WHERE id=$1', [req.params.id]);
-  res.json({ ok: true });
+  res.json({ ok: true, eliminado: tienePagos ? 'desactivado' : 'borrado' });
 });
 
 export default router;

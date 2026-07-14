@@ -642,13 +642,13 @@ function PrestamosTab({ col, onError }) {
   };
 
   const eliminar = async (p) => {
-    if (Number(p.saldo_pendiente) !== Number(p.monto_total)) {
-      return onError('No se puede eliminar: el préstamo ya tiene pagos aplicados.');
-    }
+    const tienePagos = Number(p.saldo_pendiente) < Number(p.monto_total);
     const ok = await confirm({
-      title: 'Eliminar préstamo',
-      message: `¿Eliminar préstamo de ${money(p.monto_total)}?`,
-      confirmLabel: 'Eliminar', danger: true,
+      title: tienePagos ? 'Desactivar préstamo' : 'Eliminar préstamo',
+      message: tienePagos
+        ? `Este préstamo tiene pagos aplicados. Se desactivará (no aparecerá en nómina) pero se conserva el historial. ¿Continuar?`
+        : `¿Eliminar préstamo de ${money(p.monto_total)}? Esta acción no se puede deshacer.`,
+      confirmLabel: tienePagos ? 'Desactivar' : 'Eliminar', danger: true,
     });
     if (!ok) return;
     try { await api.del(`/prestamos/${p.id}`); toast.success('Préstamo eliminado.'); cargar(); }
@@ -720,11 +720,9 @@ function PrestamosTab({ col, onError }) {
                         className="btn btn-secondary !px-2.5 !py-1 text-xs ml-1">Precancelar</button>
                     </>
                   )}
-                  {Number(p.saldo_pendiente) === Number(p.monto_total) && (
-                    <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 ml-2 align-middle" title="Eliminar">
-                      <Trash2 size={15} />
-                    </button>
-                  )}
+                  <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 ml-2 align-middle" title="Eliminar">
+                    <Trash2 size={15} />
+                  </button>
                 </td>
               </tr>
             ))}
