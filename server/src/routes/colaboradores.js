@@ -142,7 +142,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 
 // Nuevo contrato: cierra el contrato activo previo y crea el nuevo (historial de sueldos).
 router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { sueldo_base, fecha_inicio, notas, tipo_contrato } = req.body;
+  const { sueldo_base, fecha_inicio, notas, tipo_contrato, bono } = req.body;
   if (!sueldo_base || !fecha_inicio) {
     return res.status(400).json({ error: 'sueldo_base y fecha_inicio requeridos' });
   }
@@ -157,9 +157,9 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
       [fecha_inicio, req.params.id]
     );
     const { rows } = await client.query(
-      `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio, notas, tipo_contrato)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.id, sueldo_base, fecha_inicio, notas, tipo_contrato ?? null]
+      `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio, notas, tipo_contrato, bono)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.params.id, sueldo_base, fecha_inicio, notas, tipo_contrato ?? null, bono ?? 0]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
@@ -169,6 +169,24 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
   } finally {
     client.release();
   }
+});
+
+// Eliminar un contrato (solo si no tiene roles de pago asociados).
+router.delete('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN']), async (req, res) => {
+  const { rows:vinculos } = await pool.query(
+    `SELECT rp.id FROM roles_pago rp
+     JOIN periodos p ON p.id=rp.periodo_id
+     WHERE rp.colaborador_id=$1 AND p.fecha_inicio >= (SELECT fecha_inicio FROM contratos WHERE id=$2)`,
+    [req.params.colaboradorId, req.params.contratoId]
+  );
+  if (vinculos.length > 0) {
+    return res.status(409).json({ error: 'No se puede eliminar: el contrato tiene roles de pago asociados' });
+  }
+  const { rowCount } = await pool.query('DELETE FROM contratos WHERE id=$1 AND colaborador_id=$2', [
+    req.params.contratoId, req.params.colaboradorId
+  ]);
+  if (rowCount === 0) return res.status(404).json({ error: 'no encontrado' });
+  res.json({ ok: true });
 });
 
 export default router;

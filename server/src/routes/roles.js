@@ -3,7 +3,7 @@ import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
 import { puedeEditarLineas } from '../lib/periodo-fsm.js';
 import { recalcularTotales } from '../services/roles.js';
-import { aplicarPrestamosPendientes, aplicarDescuentosPendientes } from '../services/periodos.js';
+import { aplicarPrestamosPendientes, aplicarDescuentosPendientes, aplicarSueldoPendiente } from '../services/periodos.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -119,11 +119,12 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
       await client.query('ROLLBACK');
       return res.status(409).json({ error: `período ${rows[0].estado}: no editable` });
     }
+    const agregadosSueldo = await aplicarSueldoPendiente(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_fin);
     const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
     const { agregadas: agregadosDescuentos, actualizadas } = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_inicio);
     const totales = await recalcularTotales(client, req.params.id);
     await client.query('COMMIT');
-    res.json({ ...totales, agregadas: agregadosPrestamos + agregadosDescuentos, actualizadas });
+    res.json({ ...totales, agregadas: agregadosSueldo + agregadosPrestamos + agregadosDescuentos, actualizadas });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });

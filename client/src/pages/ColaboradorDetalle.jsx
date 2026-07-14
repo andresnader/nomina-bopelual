@@ -318,7 +318,7 @@ function EmisionCell({ contrato, colaboradorId, onCambio, onError }) {
 }
 
 function ContratosTab({ col, onCambio, onError }) {
-  const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
+  const [contrato, setContrato] = useState({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '', bono: '' });
   const [tiposContrato, setTiposContrato] = useState([]);
   useEffect(() => {
     api.get('/tipos-contrato').then(setTiposContrato).catch(() => {});
@@ -330,8 +330,9 @@ function ContratosTab({ col, onCambio, onError }) {
       await api.post(`/colaboradores/${col.id}/contratos`, {
         ...contrato,
         tipo_contrato: contrato.tipo_contrato || null,
+        bono: contrato.bono ? Number(contrato.bono) : 0,
       });
-      setContrato({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '' });
+      setContrato({ sueldo_base: '', fecha_inicio: '', notas: '', tipo_contrato: '', bono: '' });
       onCambio();
     } catch (err) {
       onError(err.message);
@@ -342,9 +343,11 @@ function ContratosTab({ col, onCambio, onError }) {
     <div className="grid gap-4">
       <Card>
         <h2 className="font-semibold mb-3">Nuevo contrato / aumento</h2>
-        <form onSubmit={nuevoContrato} className="grid md:grid-cols-5 gap-2">
+        <form onSubmit={nuevoContrato} className="grid md:grid-cols-6 gap-2">
           <input required type="number" step="0.01" placeholder="Sueldo base" className="input w-full"
             value={contrato.sueldo_base} onChange={(e) => setContrato({ ...contrato, sueldo_base: e.target.value })} />
+          <input type="number" step="0.01" placeholder="Bono mensual" className="input w-full"
+            value={contrato.bono} onChange={(e) => setContrato({ ...contrato, bono: e.target.value })} />
           <input required type="date" className="input w-full"
             value={contrato.fecha_inicio} onChange={(e) => setContrato({ ...contrato, fecha_inicio: e.target.value })} />
           <select className="input w-full" value={contrato.tipo_contrato}
@@ -361,19 +364,35 @@ function ContratosTab({ col, onCambio, onError }) {
         <table className="w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
-              <th className="p-3">Sueldo</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th><th className="p-3">Emisión</th>
+              <th className="p-3">Sueldo</th><th className="p-3">Bono</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th><th className="p-3">Emisión</th><th className="p-3"></th>
             </tr>
           </thead>
           <tbody>
             {col.contratos.map((c) => (
               <tr key={c.id} className="border-b border-slate-200">
                 <td className="p-3 font-medium">{money(c.sueldo_base)}</td>
+                <td className="p-3">{c.bono ? money(c.bono) : '—'}</td>
                 <td className="p-3">{fecha(c.fecha_inicio)}</td>
                 <td className="p-3">{c.fecha_fin ? fecha(c.fecha_fin) : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}</td>
                 <td className="p-3">{tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? '—'}</td>
                 <td className="p-3 text-slate-500">{c.notas || '—'}</td>
                 <td className="p-3">
                   <EmisionCell contrato={c} colaboradorId={col.id} onCambio={onCambio} onError={onError} />
+                </td>
+                <td className="p-3">
+                  <button
+                    className="text-red-500 hover:text-red-700 text-xs"
+                    title="Eliminar contrato"
+                    onClick={async () => {
+                      if (!confirm('¿Eliminar este contrato?')) return;
+                      try {
+                        await api.del(`/colaboradores/${col.id}/contratos/${c.id}`);
+                        onCambio();
+                      } catch (err) {
+                        onError(err.message);
+                      }
+                    }}
+                  >✕</button>
                 </td>
               </tr>
             ))}
