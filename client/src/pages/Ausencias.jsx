@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Pencil, X } from 'lucide-react';
+import { Check, Pencil, Trash2, X } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
@@ -64,6 +64,14 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
     catch (e) { onError(e.message); }
   };
 
+  const eliminar = async (a) => {
+    if (!window.confirm(`¿Eliminar ausencia ${a.tipo} del ${a.fecha_desde?.slice(0, 10)}?`)) return;
+    try {
+      await api.del(`/ausencias/${a.id}`);
+      onCambio();
+    } catch (e) { onError(e.message); }
+  };
+
   const guardarEdicion = async (e) => {
     e.preventDefault();
     try {
@@ -122,6 +130,8 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
                       className="text-emerald-600 hover:bg-emerald-50 rounded p-1.5"><Check size={16} /></button>
                     <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
                       className="text-red-600 hover:bg-red-50 rounded p-1.5"><X size={16} /></button>
+                    <button onClick={() => eliminar(a)} title="Eliminar"
+                      className="text-slate-400 hover:text-red-500 rounded p-1.5"><Trash2 size={16} /></button>
                   </RoleGate>
                 )}
               </td>
