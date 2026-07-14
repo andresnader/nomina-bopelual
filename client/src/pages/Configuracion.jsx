@@ -6,12 +6,13 @@ import PageTitle from '../components/PageTitle.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 
-const TABS = ['General', 'Empresas', 'Servicios de Descuento', 'Tipos de Contrato', 'Bancos', 'Usuarios'];
+const TABS = ['General', 'Empresas', 'Servicios de Descuento', 'Tipos de Contrato', 'Horarios', 'Bancos', 'Usuarios'];
 
 const ETIQUETAS_PARAMETRO = {
   SBU: 'Salario Básico Unificado (SBU)',
   PORCENTAJE_ANTICIPO: 'Porcentaje de anticipo global (1ra quincena, 0 a 1)',
   DIAS_VACACIONES_ANIO: 'Días de vacaciones por año trabajado',
+  MINUTOS_GRACIA: 'Minutos de gracia antes de descontar por atraso/salida anticipada',
 };
 
 function ParametroFila({ parametro, onGuardar }) {
@@ -495,6 +496,120 @@ function TiposContratoTab() {
   );
 }
 
+function HorarioEditModal({ horario, onClose, onGuardado }) {
+  const [form, setForm] = useState({ ...horario });
+  const toast = useToast();
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch(`/horarios/${horario.codigo}`, {
+        nombre: form.nombre,
+        hora_entrada_semana: form.hora_entrada_semana,
+        hora_salida_semana: form.hora_salida_semana,
+        hora_entrada_sabado: form.hora_entrada_sabado,
+        hora_salida_sabado: form.hora_salida_sabado,
+        horas_jornada_semana: Number(form.horas_jornada_semana),
+        horas_jornada_sabado: Number(form.horas_jornada_sabado),
+      });
+      toast.success('Horario actualizado.');
+      onGuardado();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`Editar horario — ${horario.codigo}`} size="md"
+      footer={<button type="submit" form="form-editar-horario" className="btn btn-primary">Guardar</button>}>
+      <form id="form-editar-horario" onSubmit={guardar} className="grid gap-3">
+        <label className="text-sm text-slate-600">Nombre
+          <input required className="input w-full" value={form.nombre}
+            onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm text-slate-600">Entrada (lunes a viernes)
+            <input required type="time" className="input w-full" value={form.hora_entrada_semana}
+              onChange={(e) => setForm({ ...form, hora_entrada_semana: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Salida (lunes a viernes)
+            <input required type="time" className="input w-full" value={form.hora_salida_semana}
+              onChange={(e) => setForm({ ...form, hora_salida_semana: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Entrada (sábado)
+            <input required type="time" className="input w-full" value={form.hora_entrada_sabado}
+              onChange={(e) => setForm({ ...form, hora_entrada_sabado: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Salida (sábado)
+            <input required type="time" className="input w-full" value={form.hora_salida_sabado}
+              onChange={(e) => setForm({ ...form, hora_salida_sabado: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Horas de jornada (semana)
+            <input required type="number" step="0.5" min="0" className="input w-full" value={form.horas_jornada_semana}
+              onChange={(e) => setForm({ ...form, horas_jornada_semana: e.target.value })} />
+          </label>
+          <label className="text-sm text-slate-600">Horas de jornada (sábado)
+            <input required type="number" step="0.5" min="0" className="input w-full" value={form.horas_jornada_sabado}
+              onChange={(e) => setForm({ ...form, horas_jornada_sabado: e.target.value })} />
+          </label>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function HorariosTab() {
+  const [horarios, setHorarios] = useState([]);
+  const [editando, setEditando] = useState(null);
+  const toast = useToast();
+
+  const cargar = () => api.get('/horarios/todos').then(setHorarios).catch((e) => toast.error(e.message));
+  useEffect(() => { cargar(); }, []);
+
+  return (
+    <Card>
+      <h2 className="font-display font-bold mb-1">Horarios</h2>
+      <p className="text-sm text-muted mb-3">
+        Usados para calcular descuentos por atraso o salida anticipada en la pestaña
+        "Horario" de la ficha del colaborador.
+      </p>
+      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-2">Horario</th>
+              <th className="p-2">Lunes a viernes</th>
+              <th className="p-2">Sábado</th>
+              <th className="p-2 w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {horarios.map((h) => (
+              <tr key={h.codigo} className="border-b border-slate-100">
+                <td className="p-2 font-medium">{h.nombre}</td>
+                <td className="p-2">
+                  {h.hora_entrada_semana.slice(0, 5)} - {h.hora_salida_semana.slice(0, 5)} ({h.horas_jornada_semana}h)
+                </td>
+                <td className="p-2">
+                  {h.hora_entrada_sabado.slice(0, 5)} - {h.hora_salida_sabado.slice(0, 5)} ({h.horas_jornada_sabado}h)
+                </td>
+                <td className="p-2">
+                  <button onClick={() => setEditando(h)} className="text-gold-600 text-xs hover:underline">Editar</button>
+                </td>
+              </tr>
+            ))}
+            {horarios.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin horarios.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {editando && (
+        <HorarioEditModal horario={editando} onClose={() => setEditando(null)}
+          onGuardado={() => { setEditando(null); cargar(); }} />
+      )}
+    </Card>
+  );
+}
+
 export default function Configuracion() {
   const [tab, setTab] = useState('General');
   return (
@@ -516,6 +631,7 @@ export default function Configuracion() {
       {tab === 'Empresas' && <EmpresasTab />}
       {tab === 'Servicios de Descuento' && <ServiciosDescuentoTab />}
       {tab === 'Tipos de Contrato' && <TiposContratoTab />}
+      {tab === 'Horarios' && <HorariosTab />}
       {tab === 'Bancos' && <BancosTab />}
       {tab === 'Usuarios' && <UsuariosTab />}
     </div>
