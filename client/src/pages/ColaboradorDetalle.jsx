@@ -13,12 +13,14 @@ import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
-const TABS_BASE = ['Ficha', 'Contratos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
+const TABS_BASE = ['Ficha', 'Horario', 'Contratos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
 function FichaTab({ col, onGuardado, onError }) {
   const [bancos, setBancos] = useState([]);
+  const [horarios, setHorarios] = useState([]);
   useEffect(() => {
     api.get('/bancos').then(setBancos).catch(() => {});
+    api.get('/horarios').then(setHorarios).catch(() => {});
   }, []);
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
@@ -29,6 +31,7 @@ function FichaTab({ col, onGuardado, onError }) {
     pct_anticipo: col.pct_anticipo ?? '',
     fecha_nacimiento: col.fecha_nacimiento?.slice(0, 10) ?? '', sexo: col.sexo ?? '',
     estado_civil: col.estado_civil ?? '', direccion: col.direccion ?? '',
+    horario: col.horario ?? '',
   });
 
   const guardar = async (e) => {
@@ -43,6 +46,7 @@ function FichaTab({ col, onGuardado, onError }) {
         sexo: form.sexo || null,
         estado_civil: form.estado_civil || null,
         direccion: form.direccion || null,
+        horario: form.horario || null,
       });
       onGuardado();
     } catch (err) {
@@ -90,6 +94,12 @@ function FichaTab({ col, onGuardado, onError }) {
               <option value="">—</option>
               <option>BOPELUAL S.A.</option>
               <option>CARROS-YA S.A.</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">Horario
+            <select className="input w-full" value={form.horario} onChange={(e) => setForm({ ...form, horario: e.target.value })}>
+              <option value="">—</option>
+              {horarios.map((h) => <option key={h.codigo} value={h.codigo}>{h.nombre}</option>)}
             </select>
           </label>
           <label className="text-sm text-slate-600">Centro de costo {campo('centro_costo')}</label>
@@ -674,6 +684,121 @@ function AusenciasTab({ col, onError }) {
   );
 }
 
+function HorarioTab({ col, onError, onCambio }) {
+  const [incidencias, setIncidencias] = useState([]);
+  const [form, setForm] = useState({ fecha: '', hora_entrada_real: '', hora_salida_real: '', notas: '' });
+  const toast = useToast();
+
+  const cargar = () => api.get(`/colaboradores/${col.id}/incidencias-horario`).then(setIncidencias).catch((e) => onError(e.message));
+  useEffect(() => { cargar(); }, [col.id]);
+
+  if (!col.horario) {
+    return <Card className="text-slate-500">Este colaborador no tiene un horario asignado. Asígnalo en la pestaña Ficha.</Card>;
+  }
+
+  const registrar = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/colaboradores/${col.id}/incidencias-horario`, {
+        fecha: form.fecha,
+        hora_entrada_real: form.hora_entrada_real || null,
+        hora_salida_real: form.hora_salida_real || null,
+        notas: form.notas || null,
+      });
+      setForm({ fecha: '', hora_entrada_real: '', hora_salida_real: '', notas: '' });
+      toast.success('Incidencia registrada.');
+      cargar();
+    } catch (err) {
+      onError(err.message);
+    }
+  };
+
+  const aplicar = async (incidenciaId, rolPagoId) => {
+    if (!rolPagoId) return;
+    try {
+      await api.post(`/colaboradores/${col.id}/incidencias-horario/${incidenciaId}/aplicar`, { rol_pago_id: rolPagoId });
+      toast.success('Descuento aplicado al rol de pago.');
+      cargar();
+      onCambio();
+    } catch (err) {
+      onError(err.message);
+    }
+  };
+
+  const eliminar = async (id) => {
+    try {
+      await api.del(`/colaboradores/${col.id}/incidencias-horario/${id}`);
+      cargar();
+    } catch (err) {
+      onError(err.message);
+    }
+  };
+
+  const rolesBorrador = col.roles_pago.filter((r) => r.periodo_estado === 'BORRADOR');
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <h2 className="font-semibold mb-3">Registrar incidencia</h2>
+        <form onSubmit={registrar} className="grid md:grid-cols-4 gap-2">
+          <input required type="date" className="input w-full"
+            value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+          <input type="time" placeholder="Hora entrada real" className="input w-full"
+            value={form.hora_entrada_real} onChange={(e) => setForm({ ...form, hora_entrada_real: e.target.value })} />
+          <input type="time" placeholder="Hora salida real" className="input w-full"
+            value={form.hora_salida_real} onChange={(e) => setForm({ ...form, hora_salida_real: e.target.value })} />
+          <button className="btn btn-primary">Registrar</button>
+          <input placeholder="Notas (opcional)" className="input w-full md:col-span-4"
+            value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+        </form>
+        <p className="text-xs text-slate-500 mt-2">
+          Deja la hora de entrada y/o salida real según lo que haya ocurrido ese día.
+        </p>
+      </Card>
+      <Card className="p-0 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-3">Fecha</th><th className="p-3">Tardanza</th><th className="p-3">Salida anticipada</th>
+              <th className="p-3 text-right">Descuento</th><th className="p-3">Estado</th><th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {incidencias.map((inc) => (
+              <tr key={inc.id} className="border-b border-slate-200">
+                <td className="p-3">{fecha(inc.fecha)}</td>
+                <td className="p-3">{inc.minutos_tardanza > 0 ? `${inc.minutos_tardanza} min` : '—'}</td>
+                <td className="p-3">{inc.minutos_salida_anticipada > 0 ? `${inc.minutos_salida_anticipada} min` : '—'}</td>
+                <td className="p-3 text-right font-medium">{money(inc.monto_total)}</td>
+                <td className="p-3">
+                  {inc.lineas_rol_id
+                    ? <span className="badge bg-emerald-100 text-emerald-700">APLICADA</span>
+                    : <span className="badge bg-amber-100 text-amber-700">PENDIENTE</span>}
+                </td>
+                <td className="p-3 text-right whitespace-nowrap">
+                  {!inc.lineas_rol_id && (
+                    <>
+                      <select className="input !py-1 !px-2 text-xs" defaultValue=""
+                        onChange={(e) => aplicar(inc.id, e.target.value)}>
+                        <option value="">Aplicar a...</option>
+                        {rolesBorrador.map((r) => <option key={r.id} value={r.id}>{r.periodo_nombre}</option>)}
+                      </select>
+                      <button onClick={() => eliminar(inc.id)} className="text-slate-400 hover:text-red-600 ml-2 align-middle" title="Eliminar">
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {incidencias.length === 0 && <tr><td colSpan={6} className="p-4 text-slate-500">Sin incidencias registradas.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
 function DocumentosColaboradorCell({ col, tipo, label, onError }) {
   const [emisiones, setEmisiones] = useState([]);
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -1039,6 +1164,7 @@ export default function ColaboradorDetalle() {
       </div>
 
       {tab === 'Ficha' && <FichaTab col={col} onGuardado={() => { setError(null); cargar(); }} onError={setError} />}
+      {tab === 'Horario' && <HorarioTab col={col} onError={setError} onCambio={() => { setError(null); cargar(); }} />}
       {tab === 'Contratos' && <ContratosTab col={col} onCambio={() => { setError(null); cargar(); }} onError={setError} />}
       {tab === 'Descuentos' && <DescuentosTab col={col} onError={setError} />}
       {tab === 'Préstamos' && <PrestamosTab col={col} onError={setError} />}
