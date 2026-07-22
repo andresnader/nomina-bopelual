@@ -31,7 +31,9 @@ function FichaTab({ col, onGuardado, onError }) {
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
     cuenta_bancaria: col.cuenta_bancaria ?? '', forma_pago: col.forma_pago ?? 'TRANSFERENCIA',
-    pct_anticipo: col.pct_anticipo ?? '',
+    // numeric(4,3) vuelve del servidor como "0.500" (con ceros de relleno);
+    // normalizamos a "0.5" para que coincida con el value de las <option>.
+    pct_anticipo: col.pct_anticipo != null ? String(Number(col.pct_anticipo)) : '',
     fecha_nacimiento: col.fecha_nacimiento?.slice(0, 10) ?? '', sexo: col.sexo ?? '',
     estado_civil: col.estado_civil ?? '', direccion: col.direccion ?? '',
     horario: col.horario ?? '',
