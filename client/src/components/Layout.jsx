@@ -92,7 +92,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* Bottom nav mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-brand-900 border-t border-brand-700 flex justify-around py-2 px-2 safe-area-bottom">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-brand-900 border-t border-brand-700 flex justify-around pt-2 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
         {items.slice(0, 5).map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}

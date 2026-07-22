@@ -8,6 +8,7 @@ import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
+import { RUBROS_TIPO } from './ColaboradorDetalle.jsx';
 
 const NUEVA = { tipo_linea: '', clase: 'INGRESO', monto: '', descripcion: '' };
 
@@ -16,10 +17,12 @@ export default function RolPago() {
   const [rol, setRol] = useState(null);
   const [nueva, setNueva] = useState(NUEVA);
   const [error, setError] = useState(null);
+  const [tiposDescuento, setTiposDescuento] = useState([]);
   const toast = useToast();
 
   const cargar = () => api.get(`/roles/${id}`).then(setRol).catch((e) => setError(e.message));
   useEffect(() => { cargar(); }, [id]);
+  useEffect(() => { api.get('/descuentos/tipos').then(setTiposDescuento).catch(() => {}); }, []);
 
   const agregar = async (e) => {
     e.preventDefault();
@@ -67,6 +70,7 @@ export default function RolPago() {
   return (
     <div>
       <PageTitle
+        volver={{ to: `/periodos/${rol.periodo_id}`, label: 'Volver al período' }}
         accion={
           <div className="flex gap-2">
             {editable && (
@@ -126,10 +130,15 @@ export default function RolPago() {
           <Card className="mt-4">
             <h3 className="font-display font-bold mb-2">Agregar línea</h3>
             <form onSubmit={agregar} className="grid md:grid-cols-4 gap-2">
-              <input required placeholder="Tipo (ej: BONO_DESEMPENO)" value={nueva.tipo_linea}
+              <select required value={nueva.tipo_linea}
                 onChange={(e) => setNueva({ ...nueva, tipo_linea: e.target.value })}
-                className="input w-full" />
-              <select value={nueva.clase} onChange={(e) => setNueva({ ...nueva, clase: e.target.value })}
+                className="input w-full">
+                <option value="">Tipo…</option>
+                {(nueva.clase === 'INGRESO' ? RUBROS_TIPO : tiposDescuento.map((t) => ({ value: t.tipo, label: t.label })))
+                  .map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <select value={nueva.clase}
+                onChange={(e) => setNueva({ ...nueva, clase: e.target.value, tipo_linea: '' })}
                 className="input w-full">
                 <option value="INGRESO">Ingreso</option>
                 <option value="DESCUENTO">Descuento</option>
@@ -156,7 +165,7 @@ function Linea({ l, editable, onDel }) {
       <span className="flex items-center gap-3">
         {money(l.monto)}
         {editable && (
-          <button onClick={() => onDel(l.id)} className="text-red-400 text-xs">✕</button>
+          <button onClick={() => onDel(l.id)} className="text-red-400 text-xs -m-2 p-2 md:m-0 md:p-0">✕</button>
         )}
       </span>
     </div>

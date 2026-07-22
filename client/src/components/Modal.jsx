@@ -12,20 +12,25 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
 
   if (!open) return null;
 
-  const anchos = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg' };
+  const anchos = { sm: 'md:max-w-sm', md: 'md:max-w-md', lg: 'md:max-w-lg' };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center md:items-center md:p-4">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} />
-      <div className={`relative w-full ${anchos[size]} bg-white rounded-xl shadow-xl animate-slide-up`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+      <div role="dialog" aria-modal="true" aria-label={title}
+        className={`relative w-full h-full md:h-auto ${anchos[size]} bg-white md:rounded-xl shadow-xl animate-slide-up flex flex-col`}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0 pt-[calc(1rem+env(safe-area-inset-top))] md:pt-4">
           <h2 className="font-display font-bold text-slate-900">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 -m-3 p-3 md:m-0 md:p-0">
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-200">{footer}</div>}
+        <div className="p-5 flex-1 overflow-y-auto">{children}</div>
+        {footer && (
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-200 shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body

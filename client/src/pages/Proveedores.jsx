@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
@@ -70,7 +71,8 @@ export function TablaFacturas({ facturas, onCambio, conProveedor = true, conEmpr
   };
 
   return (
-    <table className="w-full text-sm">
+    <>
+    <table className="hidden md:table w-full text-sm">
       <thead className="text-slate-500 text-left">
         <tr className="border-b border-slate-200">
           {conProveedor && <th className="p-3">Proveedor</th>}
@@ -113,6 +115,38 @@ export function TablaFacturas({ facturas, onCambio, conProveedor = true, conEmpr
         )}
       </tbody>
     </table>
+
+    <div className="md:hidden space-y-2 p-2">
+      {facturas.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin facturas registradas.</p>}
+      {facturas.map((f) => (
+        <MobileCard
+          key={f.id}
+          top={
+            <>
+              {conProveedor
+                ? <Link to={`/colaboradores/${f.colaborador_id}`} className="text-gold-600 font-medium hover:underline">{f.colaborador_nombre}</Link>
+                : <span className="font-medium text-slate-800">{f.numero_factura || 'Sin número'}</span>}
+              <Badge estado={f.estado} />
+            </>
+          }
+          meta={
+            <span className="flex items-center justify-between">
+              <span>{conEmpresa ? `${f.empresa || '—'} · ` : ''}{f.numero_factura || '—'} · {fecha(f.fecha_factura)}</span>
+              <span className="font-semibold text-slate-700">{money(f.neto)}</span>
+            </span>
+          }
+          footer={
+            <>
+              <span>Bruto {money(f.monto_bruto)} · Retención {money(f.retencion_10pct)}</span>
+              {f.estado === 'PENDIENTE' && (
+                <button onClick={() => marcarPagada(f.id)} className="text-emerald-600 shrink-0 p-2 -m-2">Marcar pagada</button>
+              )}
+            </>
+          }
+        />
+      ))}
+    </div>
+    </>
   );
 }
 

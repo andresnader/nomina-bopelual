@@ -233,6 +233,95 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
   return { agregadas, actualizadas };
 }
 
+// Genera el rol_pago de UN colaborador para un período dado, con las mismas
+// líneas automáticas que generarRoles. Si el colaborador es IESS y su fecha
+// de ingreso cae a mitad de este período, prorratea el sueldo/bono/rubros
+// según los días trabajados (convención de 15 días por quincena) — los
+// colaboradores EXTERNO nunca se prorratean. Reutilizable desde generarRoles
+// (período nuevo) y agregarColaboradorAPeriodosBorrador (colaborador nuevo).
+async function generarRolColaborador(client, periodoId, periodo, col, pctAnticipoGlobal, sbu) {
+  const { rows: rolRows } = await client.query(
+    `INSERT INTO roles_pago (periodo_id, colaborador_id) VALUES ($1,$2) RETURNING id`,
+    [periodoId, col.id]
+  );
+  const rolId = rolRows[0].id;
+  const sueldo = Number(col.sueldo_base);
+  const bono = Number(col.bono);
+  const quincena = periodo.quincena;
+  // El % de anticipo del colaborador manda; sin él aplica el parámetro global.
+  const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
+  const factor = col.tipo === 'IESS'
+    ? calc.factorProrrateoIngreso(col.fecha_ingreso, periodo.fecha_inicio, periodo.fecha_fin)
+    : 1;
+  const sufijoProrrateo = factor < 1 ? ` · prorrateado (${(factor * 100).toFixed(0)}% de la quincena)` : '';
+
+  if (quincena === 1) {
+    await insertarLinea(client, rolId, {
+      tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: round2(calc.anticipoQuincena(sueldo, pct) * factor),
+      desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
+    });
+    if (bono > 0) {
+      await insertarLinea(client, rolId, {
+        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pct * factor),
+        desc: `Bono primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
+      });
+    }
+  } else {
+    const pctSegunda = round2(1 - pct);
+    await insertarLinea(client, rolId, {
+      tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda * factor),
+      desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
+    });
+    if (bono > 0) {
+      await insertarLinea(client, rolId, {
+        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pctSegunda * factor),
+        desc: `Bono segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
+      });
+    }
+    if (col.tipo === 'IESS') {
+      await insertarLinea(client, rolId, {
+        tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo)
+      });
+      await insertarLinea(client, rolId, {
+        tipo: 'DECIMO_TERCERO', clase: 'INGRESO',
+        monto: calc.decimoTercero(sueldo)
+      });
+      await insertarLinea(client, rolId, {
+        tipo: 'DECIMO_CUARTO', clase: 'INGRESO',
+        monto: calc.decimoCuarto(sbu)
+      });
+      await insertarLinea(client, rolId, {
+        tipo: 'FONDOS_RESERVA', clase: 'INGRESO',
+        monto: calc.fondosReserva(sueldo, 999),
+        desc: 'Fondos de reserva'
+      });
+    }
+  }
+
+  // ── Rubros de Ingreso Proyectados ──────────────────────────────────
+  const { rows: rubros } = await client.query(
+    `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
+    [col.id]
+  );
+  for (const rubro of rubros) {
+    const montoMensual = Number(rubro.valor_mensual);
+    if (montoMensual <= 0) continue;
+    const monto = quincena === 1 ? round2(montoMensual * pct * factor) : round2(montoMensual * (1 - pct) * factor);
+    if (monto > 0) {
+      await insertarLinea(client, rolId, {
+        tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
+        desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})${sufijoProrrateo}`
+      });
+    }
+  }
+
+  await aplicarPrestamosPendientes(client, rolId, col.id, periodo.fecha_fin);
+  await aplicarDescuentosPendientes(client, rolId, col.id, quincena, periodo.fecha_inicio);
+
+  await recalcularTotales(client, rolId);
+  return rolId;
+}
+
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
 // La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
 export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }) {
@@ -243,7 +332,7 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
   if (periodoRows[0].estado !== 'BORRADOR') {
     throw new Error(`no se generan roles en estado ${periodoRows[0].estado}`);
   }
-  const quincena = periodoRows[0].quincena;
+  const periodo = periodoRows[0];
   const { rows: colaboradores } = await client.query(
     `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
      FROM colaboradores c
@@ -253,83 +342,50 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
 
   let creados = 0;
   for (const col of colaboradores) {
-    const { rows: rolRows } = await client.query(
-      `INSERT INTO roles_pago (periodo_id, colaborador_id) VALUES ($1,$2) RETURNING id`,
-      [periodoId, col.id]
-    );
-    const rolId = rolRows[0].id;
-    const sueldo = Number(col.sueldo_base);
-    const bono = Number(col.bono);
-    // El % de anticipo del colaborador manda; sin él aplica el parámetro global.
-    const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipo;
-
-    if (quincena === 1) {
-      await insertarLinea(client, rolId, {
-        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo, pct),
-        desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)`
-      });
-      if (bono > 0) {
-        await insertarLinea(client, rolId, {
-          tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pct),
-          desc: `Bono primera quincena (${(pct * 100).toFixed(0)}%)`
-        });
-      }
-    } else {
-      const pctSegunda = round2(1 - pct);
-      await insertarLinea(client, rolId, {
-        tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda),
-        desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`
-      });
-      if (bono > 0) {
-        await insertarLinea(client, rolId, {
-          tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pctSegunda),
-          desc: `Bono segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`
-        });
-      }
-      if (col.tipo === 'IESS') {
-        await insertarLinea(client, rolId, {
-          tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo)
-        });
-        await insertarLinea(client, rolId, {
-          tipo: 'DECIMO_TERCERO', clase: 'INGRESO',
-          monto: calc.decimoTercero(sueldo)
-        });
-        await insertarLinea(client, rolId, {
-          tipo: 'DECIMO_CUARTO', clase: 'INGRESO',
-          monto: calc.decimoCuarto(sbu)
-        });
-        await insertarLinea(client, rolId, {
-          tipo: 'FONDOS_RESERVA', clase: 'INGRESO',
-          monto: calc.fondosReserva(sueldo, 999),
-          desc: 'Fondos de reserva'
-        });
-      }
-    }
-
-    // ── Rubros de Ingreso Proyectados ──────────────────────────────────
-    const { rows: rubros } = await client.query(
-      `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
-      [col.id]
-    );
-    for (const rubro of rubros) {
-      const montoMensual = Number(rubro.valor_mensual);
-      if (montoMensual <= 0) continue;
-      const monto = quincena === 1 ? round2(montoMensual * pct) : round2(montoMensual * (1 - pct));
-      if (monto > 0) {
-        await insertarLinea(client, rolId, {
-          tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
-          desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})`
-        });
-      }
-    }
-
-    await aplicarPrestamosPendientes(client, rolId, col.id, periodoRows[0].fecha_fin);
-    await aplicarDescuentosPendientes(client, rolId, col.id, quincena, periodoRows[0].fecha_inicio);
-
-    await recalcularTotales(client, rolId);
+    await generarRolColaborador(client, periodoId, periodo, col, pctAnticipo, sbu);
     creados++;
   }
   return { creados };
+}
+
+// Si al crear el primer contrato (sueldo) de un colaborador hay uno o más
+// períodos en BORRADOR, le genera de inmediato su línea de rol en cada uno
+// (con prorrateo si su fecha_ingreso cae a mitad de ese período). No hace
+// nada si ya tiene un rol en ese período (evita duplicar por un aumento de
+// sueldo posterior).
+export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId) {
+  const { rows: periodosBorrador } = await client.query(
+    `SELECT * FROM periodos WHERE estado='BORRADOR' ORDER BY fecha_inicio FOR UPDATE`
+  );
+  if (periodosBorrador.length === 0) return { agregados: 0 };
+
+  const { rows: colRows } = await client.query(
+    `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
+     FROM colaboradores c
+     JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
+     WHERE c.id=$1 AND c.activo=true`,
+    [colaboradorId]
+  );
+  if (colRows.length === 0) return { agregados: 0 };
+  const col = colRows[0];
+
+  const { rows: paramRows } = await client.query(
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO')`
+  );
+  const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
+  const sbu = Number(params.SBU ?? '460');
+  const pctAnticipo = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+
+  let agregados = 0;
+  for (const periodo of periodosBorrador) {
+    const { rows: existente } = await client.query(
+      'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]
+    );
+    if (existente.length > 0) continue;
+    await generarRolColaborador(client, periodo.id, periodo, col, pctAnticipo, sbu);
+    agregados++;
+  }
+  return { agregados };
 }
 
 // Sincroniza TODOS los roles de un período de una sola vez: agrega préstamos/

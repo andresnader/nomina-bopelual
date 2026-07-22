@@ -99,11 +99,12 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
 // Archivo de pago masivo Cash Management (Banco Pichincha) del período.
 // Filtros: ?empresa=BOPELUAL S.A.&grupo=ADM|COMERCIAL|SERV_PROF
 // Los grupos replican los TXT del proceso manual: SERV_PROF = externos,
-// COMERCIAL = IESS en ventas/comercial, ADM = el resto de IESS.
+// COMERCIAL/ADM = IESS según el campo explícito clasificacion del colaborador
+// (antes se adivinaba comparando el texto libre de Departamento).
 const FILTRO_GRUPO = {
   SERV_PROF: `c.tipo='EXTERNO'`,
-  COMERCIAL: `c.tipo='IESS' AND c.departamento IN ('VENTAS','COMERCIAL')`,
-  ADM: `c.tipo='IESS' AND (c.departamento IS NULL OR c.departamento NOT IN ('VENTAS','COMERCIAL'))`,
+  COMERCIAL: `c.tipo='IESS' AND c.clasificacion='COMERCIAL'`,
+  ADM: `c.tipo='IESS' AND c.clasificacion='ADMINISTRATIVO'`,
 };
 
 router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => {

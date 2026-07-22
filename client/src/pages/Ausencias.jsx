@@ -4,6 +4,7 @@ import { Check, Pencil, Trash2, X } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
 import { Modal } from '../components/Modal.jsx';
@@ -19,6 +20,7 @@ const ESTILO_ESTADO = {
 
 // Formulario reutilizado en la bandeja RRHH, la ficha y el portal del colaborador.
 export function FormAusencia({ colaboradorId, colaboradores, onCreado, onError }) {
+  const toast = useToast();
   const [form, setForm] = useState({ colaborador_id: colaboradorId || '', tipo: 'VACACIONES', fecha_desde: '', fecha_hasta: '', motivo: '' });
 
   const crear = async (e) => {
@@ -26,6 +28,7 @@ export function FormAusencia({ colaboradorId, colaboradores, onCreado, onError }
     try {
       await api.post('/ausencias', { ...form, colaborador_id: colaboradorId || form.colaborador_id || undefined });
       setForm({ ...form, fecha_desde: '', fecha_hasta: '', motivo: '' });
+      toast.success('Ausencia registrada.');
       onCreado();
     } catch (err) {
       onError(err.message);
@@ -89,9 +92,26 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
     }
   };
 
+  const Acciones = ({ a, iconSize = 16 }) => (
+    <RoleGate roles={['ADMIN', 'RRHH']}>
+      {a.estado === 'SOLICITADA' && (
+        <>
+          <button onClick={() => setEditando({ ...a, fecha_desde: a.fecha_desde?.slice(0, 10), fecha_hasta: a.fecha_hasta?.slice(0, 10) })}
+            title="Editar" className="text-slate-400 hover:text-gold-600 rounded p-3 md:p-1.5"><Pencil size={iconSize} /></button>
+          <button onClick={() => decidir(a, 'aprobar')} title="Aprobar"
+            className="text-emerald-600 hover:bg-emerald-50 rounded p-3 md:p-1.5"><Check size={iconSize} /></button>
+          <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
+            className="text-red-600 hover:bg-red-50 rounded p-3 md:p-1.5"><X size={iconSize} /></button>
+        </>
+      )}
+      <button onClick={() => eliminar(a)} title="Eliminar"
+        className="text-slate-400 hover:text-red-500 rounded p-3 md:p-1.5"><Trash2 size={iconSize} /></button>
+    </RoleGate>
+  );
+
   return (
     <>
-    <table className="w-full text-sm">
+    <table className="hidden md:table w-full text-sm">
       <thead className="text-slate-500 text-left">
         <tr className="border-b border-slate-200">
           {conColaborador && <th className="p-3">Colaborador</th>}
@@ -122,20 +142,7 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
             <td className="p-3 text-slate-500">{a.motivo || '—'}</td>
             {gestionable && (
               <td className="p-3 text-right whitespace-nowrap">
-                <RoleGate roles={['ADMIN', 'RRHH']}>
-                  {a.estado === 'SOLICITADA' && (
-                    <>
-                      <button onClick={() => setEditando({ ...a, fecha_desde: a.fecha_desde?.slice(0, 10), fecha_hasta: a.fecha_hasta?.slice(0, 10) })}
-                        title="Editar" className="text-slate-400 hover:text-gold-600 rounded p-1.5"><Pencil size={16} /></button>
-                      <button onClick={() => decidir(a, 'aprobar')} title="Aprobar"
-                        className="text-emerald-600 hover:bg-emerald-50 rounded p-1.5"><Check size={16} /></button>
-                      <button onClick={() => decidir(a, 'rechazar')} title="Rechazar"
-                        className="text-red-600 hover:bg-red-50 rounded p-1.5"><X size={16} /></button>
-                    </>
-                  )}
-                  <button onClick={() => eliminar(a)} title="Eliminar"
-                    className="text-slate-400 hover:text-red-500 rounded p-1.5"><Trash2 size={16} /></button>
-                </RoleGate>
+                <Acciones a={a} />
               </td>
             )}
           </tr>
@@ -145,6 +152,32 @@ export function TablaAusencias({ ausencias, onCambio, onError, conColaborador = 
         )}
       </tbody>
     </table>
+
+    <div className="md:hidden space-y-2 p-2">
+      {ausencias.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin ausencias registradas.</p>}
+      {ausencias.map((a) => (
+        <MobileCard
+          key={a.id}
+          top={
+            <>
+              {conColaborador
+                ? <Link to={`/colaboradores/${a.colaborador_id}`} className="text-gold-600 font-medium hover:underline">{a.colaborador_nombre}</Link>
+                : <span className="font-medium text-slate-800">{a.tipo}</span>}
+              <span className={ESTILO_ESTADO[a.estado]}>{a.estado}</span>
+            </>
+          }
+          meta={`${conColaborador ? `${a.tipo} · ` : ''}${fecha(a.fecha_desde)}–${fecha(a.fecha_hasta)} · ${Number(a.dias)} día${Number(a.dias) === 1 ? '' : 's'}`}
+          footer={
+            gestionable && (
+              <>
+                <span className="truncate">{a.motivo || 'Sin motivo'}</span>
+                <span className="flex items-center shrink-0"><Acciones a={a} iconSize={15} /></span>
+              </>
+            )
+          }
+        />
+      ))}
+    </div>
 
     <Modal open={!!editando} onClose={() => setEditando(null)}
       title="Editar ausencia" size="md"

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { money, fecha } from '../utils.js';
@@ -13,6 +14,7 @@ export const QUINCENA_LABEL = { 0: 'Ambas', 1: '1ra quincena', 2: '2da quincena'
 
 // Formulario reutilizado aquí y en la ficha del colaborador.
 export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError }) {
+  const toast = useToast();
   const [tipos, setTipos] = useState([]);
   const [form, setForm] = useState({ colaborador_id: colaboradorId || '', tipo_linea: 'ALIMENTACION', monto: '', aplicar_en: 0, cuotas_restantes: '', fecha_vencimiento: '', notas: '' });
 
@@ -31,6 +33,7 @@ export function FormDescuento({ colaboradorId, colaboradores, onCreado, onError 
         fecha_vencimiento: form.fecha_vencimiento || null,
       });
       setForm({ ...form, monto: '', cuotas_restantes: '', fecha_vencimiento: '', notas: '' });
+      toast.success('Descuento registrado.');
       onCreado();
     } catch (err) {
       onError(err.message);
@@ -123,9 +126,28 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
     }
   };
 
+  const Estado = ({ d }) => (
+    <button onClick={() => alternar(d)}
+      className={d.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+      {d.activo ? 'ACTIVO' : 'INACTIVO'}
+    </button>
+  );
+
+  const Acciones = ({ d }) => (
+    <>
+      <button onClick={() => setEditando({ ...d, monto: String(d.monto), cuotas_restantes: d.cuotas_restantes ?? '', fecha_vencimiento: d.fecha_vencimiento?.slice(0, 10) ?? '' })}
+        className="text-slate-400 hover:text-gold-600 p-3 md:p-1.5" title="Editar">
+        <Pencil size={15} />
+      </button>
+      <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-3 md:p-1.5" title="Eliminar">
+        <Trash2 size={15} />
+      </button>
+    </>
+  );
+
   return (
     <>
-      <table className="w-full text-sm">
+      <table className="hidden md:table w-full text-sm">
         <thead className="text-slate-500 text-left">
           <tr className="border-b border-slate-200">
             {conColaborador && <th className="p-3">Colaborador</th>}
@@ -153,21 +175,8 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
               <td className="p-3">{QUINCENA_LABEL[d.aplicar_en]}</td>
               <td className="p-3 text-right">{d.cuotas_restantes ?? '∞'}</td>
               <td className="p-3">{d.fecha_vencimiento ? fecha(d.fecha_vencimiento) : '∞'}</td>
-              <td className="p-3">
-                <button onClick={() => alternar(d)}
-                  className={d.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
-                  {d.activo ? 'ACTIVO' : 'INACTIVO'}
-                </button>
-              </td>
-              <td className="p-3 text-right whitespace-nowrap">
-                <button onClick={() => setEditando({ ...d, monto: String(d.monto), cuotas_restantes: d.cuotas_restantes ?? '', fecha_vencimiento: d.fecha_vencimiento?.slice(0, 10) ?? '' })}
-                  className="text-slate-400 hover:text-gold-600 p-1.5" title="Editar">
-                  <Pencil size={15} />
-                </button>
-                <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-1.5" title="Eliminar">
-                  <Trash2 size={15} />
-                </button>
-              </td>
+              <td className="p-3"><Estado d={d} /></td>
+              <td className="p-3 text-right whitespace-nowrap"><Acciones d={d} /></td>
             </tr>
           ))}
           {descuentos.length === 0 && (
@@ -175,6 +184,31 @@ export function TablaDescuentos({ descuentos, onCambio, conColaborador = true })
           )}
         </tbody>
       </table>
+
+      <div className="md:hidden space-y-2 p-2">
+        {descuentos.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin descuentos registrados.</p>}
+        {descuentos.map((d) => (
+          <MobileCard
+            key={d.id}
+            className={!d.activo ? 'opacity-50' : ''}
+            top={
+              <>
+                {conColaborador
+                  ? <Link to={`/colaboradores/${d.colaborador_id}`} className="text-gold-600 font-medium hover:underline">{d.colaborador_nombre}</Link>
+                  : <span className="font-medium text-slate-800">{d.tipo_linea}</span>}
+                <Estado d={d} />
+              </>
+            }
+            meta={`${conColaborador ? `${d.tipo_linea} · ` : ''}${money(d.monto)} · ${QUINCENA_LABEL[d.aplicar_en]}${d.notas ? ` · ${d.notas}` : ''}`}
+            footer={
+              <>
+                <span>Cuotas {d.cuotas_restantes ?? '∞'} · Vence {d.fecha_vencimiento ? fecha(d.fecha_vencimiento) : '∞'}</span>
+                <span className="flex items-center shrink-0"><Acciones d={d} /></span>
+              </>
+            }
+          />
+        ))}
+      </div>
 
       <Modal open={!!editando} onClose={() => setEditando(null)}
         title={`Editar descuento — ${editando?.tipo_linea ?? ''}`} size="md"

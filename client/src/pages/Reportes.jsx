@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
@@ -76,7 +77,7 @@ export default function Reportes() {
             Descargar detalle CSV
           </button>
         </div>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-2">Departamento</th>
@@ -117,6 +118,24 @@ export default function Reportes() {
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2">
+          {costo.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin datos.</p>}
+          {costo.map((c) => (
+            <MobileCard
+              key={c.departamento}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{c.departamento}</span>
+                  <span className="font-semibold text-slate-700">{money(seleccion ? c.neto : c.total_sueldos)}</span>
+                </>
+              }
+              meta={seleccion
+                ? `Ingresos ${money(c.total_ingresos)} · Descuentos ${money(c.total_descuentos)}`
+                : `Aporte patronal (12.15%) ${money(c.aporte_patronal)}`}
+            />
+          ))}
+        </div>
       </Card>
 
       <Card className="mb-4">
@@ -155,7 +174,7 @@ export default function Reportes() {
             Descargar CSV
           </button>
         </div>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-2">Proveedor</th><th className="p-2">Mes</th>
@@ -175,6 +194,22 @@ export default function Reportes() {
             {retenciones.length === 0 && <tr><td colSpan={5} className="p-2 text-slate-500">Sin facturas registradas.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2">
+          {retenciones.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin facturas registradas.</p>}
+          {retenciones.map((r, i) => (
+            <MobileCard
+              key={i}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{r.proveedor}</span>
+                  <span className="font-semibold text-slate-700">{money(r.total_neto)}</span>
+                </>
+              }
+              meta={`${fecha(r.mes)} · Bruto ${money(r.total_bruto)} · Retención ${money(r.total_retencion)}`}
+            />
+          ))}
+        </div>
       </Card>
 
       <Card>
@@ -188,7 +223,7 @@ export default function Reportes() {
             Descargar CSV
           </button>
         </div>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-2">Colaborador</th>
@@ -211,6 +246,17 @@ export default function Reportes() {
             {provisiones.length === 0 && <tr><td colSpan={5} className="p-2 text-slate-500">Sin provisiones para este año.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2">
+          {provisiones.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin provisiones para este año.</p>}
+          {provisiones.map((p, i) => (
+            <MobileCard
+              key={i}
+              top={<span className="font-medium text-slate-800">{p.colaborador}</span>}
+              meta={`3ro ${money(p.decimo_tercero)} · 4to ${money(p.decimo_cuarto)} · Fondos ${money(p.fondos_reserva)} · Utilidades ${money(p.utilidades)}`}
+            />
+          ))}
+        </div>
       </Card>
 
       <Card className="mt-4">
@@ -228,7 +274,7 @@ export default function Reportes() {
             Descargar CSV
           </button>
         </div>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-2">Colaborador</th>
@@ -251,6 +297,19 @@ export default function Reportes() {
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2">
+          {decimosPeriodo.length === 0 && (
+            <p className="p-2 text-slate-500 text-sm">{periodoDecimos ? 'Sin décimos en este período.' : 'Elige un período para ver el detalle.'}</p>
+          )}
+          {decimosPeriodo.map((d, i) => (
+            <MobileCard
+              key={i}
+              top={<span className="font-medium text-slate-800">{d.colaborador}</span>}
+              meta={`3ro ${money(d.decimo_tercero)} · 4to ${money(d.decimo_cuarto)} · Fondos ${money(d.fondos_reserva)}`}
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );

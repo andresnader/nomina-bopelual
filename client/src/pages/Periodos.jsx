@@ -3,13 +3,16 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
 
 const VACIO = { nombre: '', fecha_inicio: '', fecha_fin: '', quincena: 1 };
 
 export default function Periodos() {
+  const toast = useToast();
   const [lista, setLista] = useState([]);
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -28,6 +31,7 @@ export default function Periodos() {
     try {
       const res = await api.post('/periodos', { ...form, quincena: Number(form.quincena) });
       setMsg(`Período creado con ${res.creados} rol(es) generados.`);
+      toast.success('Período creado.');
       setForm(null);
       cargar();
     } catch (err) {
@@ -100,7 +104,7 @@ export default function Periodos() {
       )}
 
       <div className="card p-0 overflow-hidden animate-fade-in">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead>
             <tr className="border-b border-brand-600/30">
               <th className="table-header p-4 text-left">Período</th>
@@ -129,6 +133,27 @@ export default function Periodos() {
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {lista.length === 0 && <p className="p-8 text-center text-slate-500 text-sm">No hay períodos registrados</p>}
+          {lista.map((p) => (
+            <MobileCard
+              key={p.id}
+              top={
+                <>
+                  <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">{p.nombre}</Link>
+                  <Badge estado={p.estado} />
+                </>
+              }
+              meta={
+                <span className="flex items-center justify-between">
+                  <span>{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</span>
+                  <span className="font-medium text-slate-700">{money(p.total_neto)}</span>
+                </span>
+              }
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

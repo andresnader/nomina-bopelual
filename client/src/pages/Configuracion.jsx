@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { Modal } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -165,7 +166,7 @@ function BancosTab() {
         value={q} onChange={(e) => setQ(e.target.value)} />
 
       <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left sticky top-0 bg-white">
             <tr className="border-b border-slate-200">
               <th className="p-2 w-20">Código</th>
@@ -195,6 +196,31 @@ function BancosTab() {
             {filtrados.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin resultados.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {filtrados.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin resultados.</p>}
+          {filtrados.map((b) => (
+            <MobileCard
+              key={b.codigo}
+              className={!b.activo ? 'opacity-50' : ''}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{b.nombre}</span>
+                  <button onClick={() => alternar(b)}
+                    className={b.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                    {b.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </button>
+                </>
+              }
+              meta={`Código ${b.codigo}`}
+              footer={
+                <button onClick={() => setEditando({ codigo: b.codigo, nombre: b.nombre })} className="text-gold-600 p-2 -m-2">
+                  Editar
+                </button>
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <Modal open={!!editando} onClose={() => setEditando(null)} title={`Editar banco — código ${editando?.codigo}`} size="sm"
@@ -265,7 +291,7 @@ function UsuariosTab() {
       </Card>
 
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Correo</th>
@@ -283,6 +309,22 @@ function UsuariosTab() {
             ))}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {usuarios.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin usuarios.</p>}
+          {usuarios.map((u) => (
+            <MobileCard
+              key={u.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800 truncate">{u.email}</span>
+                  <Badge estado={u.activo ? 'PAGADO' : 'PENDIENTE'} />
+                </>
+              }
+              meta={`Rol: ${u.rol}`}
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );
@@ -347,7 +389,7 @@ function ServiciosDescuentoTab() {
       </form>
 
       <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left sticky top-0 bg-white">
             <tr className="border-b border-slate-200">
               <th className="p-2">Código</th>
@@ -377,6 +419,31 @@ function ServiciosDescuentoTab() {
             {servicios.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin servicios.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {servicios.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin servicios.</p>}
+          {servicios.map((s) => (
+            <MobileCard
+              key={s.codigo}
+              className={!s.activo ? 'opacity-50' : ''}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{s.nombre}</span>
+                  <button onClick={() => alternar(s)}
+                    className={s.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                    {s.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </button>
+                </>
+              }
+              meta={`Código ${s.codigo}`}
+              footer={
+                <button onClick={() => setEditando({ codigo: s.codigo, nombre: s.nombre })} className="text-gold-600 p-2 -m-2">
+                  Editar
+                </button>
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <Modal open={!!editando} onClose={() => setEditando(null)} title={`Editar servicio — ${editando?.codigo}`} size="sm"
@@ -451,7 +518,7 @@ function TiposContratoTab() {
       </form>
 
       <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-lg">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left sticky top-0 bg-white">
             <tr className="border-b border-slate-200">
               <th className="p-2">Código</th>
@@ -481,6 +548,31 @@ function TiposContratoTab() {
             {tipos.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin tipos de contrato.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {tipos.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin tipos de contrato.</p>}
+          {tipos.map((t) => (
+            <MobileCard
+              key={t.codigo}
+              className={!t.activo ? 'opacity-50' : ''}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{t.nombre}</span>
+                  <button onClick={() => alternar(t)}
+                    className={t.activo ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                    {t.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </button>
+                </>
+              }
+              meta={`Código ${t.codigo}`}
+              footer={
+                <button onClick={() => setEditando({ codigo: t.codigo, nombre: t.nombre })} className="text-gold-600 p-2 -m-2">
+                  Editar
+                </button>
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <Modal open={!!editando} onClose={() => setEditando(null)} title={`Editar tipo — ${editando?.codigo}`} size="sm"
@@ -574,7 +666,7 @@ function HorariosTab() {
         "Horario" de la ficha del colaborador.
       </p>
       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-2">Horario</th>
@@ -601,6 +693,18 @@ function HorariosTab() {
             {horarios.length === 0 && <tr><td colSpan={4} className="p-3 text-slate-500">Sin horarios.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {horarios.length === 0 && <p className="p-2 text-slate-500 text-sm">Sin horarios.</p>}
+          {horarios.map((h) => (
+            <MobileCard
+              key={h.codigo}
+              top={<span className="font-medium text-slate-800">{h.nombre}</span>}
+              meta={`L-V ${h.hora_entrada_semana.slice(0, 5)}-${h.hora_salida_semana.slice(0, 5)} (${h.horas_jornada_semana}h) · Sáb ${h.hora_entrada_sabado.slice(0, 5)}-${h.hora_salida_sabado.slice(0, 5)} (${h.horas_jornada_sabado}h)`}
+              footer={<button onClick={() => setEditando(h)} className="text-gold-600 p-2 -m-2">Editar</button>}
+            />
+          ))}
+        </div>
       </div>
       {editando && (
         <HorarioEditModal horario={editando} onClose={() => setEditando(null)}
@@ -615,7 +719,11 @@ export default function Configuracion() {
   return (
     <div className="animate-fade-in">
       <PageTitle>Configuración</PageTitle>
-      <div className="flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto">
+      <select value={tab} onChange={(e) => setTab(e.target.value)} className="input w-full mb-4 md:hidden">
+        {TABS.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+
+      <div className="hidden md:flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors ${

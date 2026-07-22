@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import KpiCard from '../components/KpiCard.jsx';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
@@ -59,7 +60,7 @@ function PortalColaborador({ usuario }) {
 
       <Card className="p-0 overflow-x-auto">
         <h2 className="font-semibold p-4 pb-0">Mis roles de pago</h2>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Período</th><th className="p-3 text-right">Neto</th><th className="p-3">Estado</th>
@@ -78,6 +79,22 @@ function PortalColaborador({ usuario }) {
             {col.roles_pago.length === 0 && <tr><td colSpan={3} className="p-4 text-slate-500">Aún no tienes roles de pago.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {col.roles_pago.length === 0 && <p className="p-4 text-slate-500 text-sm">Aún no tienes roles de pago.</p>}
+          {col.roles_pago.map((r) => (
+            <MobileCard
+              key={r.id}
+              top={
+                <>
+                  <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">{r.periodo_nombre}</Link>
+                  <Badge estado={r.estado_pago} />
+                </>
+              }
+              meta={`Neto: ${money(r.neto)}`}
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );

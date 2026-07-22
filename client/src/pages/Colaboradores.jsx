@@ -4,10 +4,12 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Search, ChevronLeft, ChevronRight } fr
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
+import { useToast } from '../components/Toast.jsx';
 import { fecha } from '../utils.js';
 
-const VACIO = { tipo: 'IESS', nombre: '', cedula: '', email: '', departamento: '', cargo: '', fecha_ingreso: '' };
+const VACIO = { tipo: 'IESS', nombre: '', cedula: '', email: '', departamento: '', cargo: '', fecha_ingreso: '', clasificacion: 'ADMINISTRATIVO' };
 const POR_PAGINA = [10, 25, 50, { label: 'Todos', value: 'all' }];
 const COLUMNAS = [
   { key: 'nombre', label: 'Nombre' },
@@ -18,6 +20,7 @@ const COLUMNAS = [
 ];
 
 export default function Colaboradores() {
+  const toast = useToast();
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
@@ -77,6 +80,7 @@ export default function Colaboradores() {
     try {
       await api.post('/colaboradores', { ...form, fecha_ingreso: form.fecha_ingreso || null });
       setForm(null);
+      toast.success('Colaborador creado.');
       cargar();
     } catch (err) {
       setError(err.message);
@@ -126,6 +130,14 @@ export default function Colaboradores() {
             <input placeholder="Cargo" value={form.cargo}
               onChange={(e) => setForm({ ...form, cargo: e.target.value })}
               className="input w-full" />
+            <select
+              value={form.clasificacion}
+              onChange={(e) => setForm({ ...form, clasificacion: e.target.value })}
+              className="input w-full"
+            >
+              <option value="ADMINISTRATIVO">Administrativo</option>
+              <option value="COMERCIAL">Comercial</option>
+            </select>
             <input type="date" value={form.fecha_ingreso}
               onChange={(e) => setForm({ ...form, fecha_ingreso: e.target.value })}
               className="input w-full" />
@@ -170,7 +182,7 @@ export default function Colaboradores() {
       </div>
 
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               {COLUMNAS.map((col) => (
@@ -217,6 +229,29 @@ export default function Colaboradores() {
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {cargando ? (
+            <div className="p-8 text-center text-slate-400">
+              <div className="inline-block w-5 h-5 border-2 border-gold-400/30 border-t-gold-400 rounded-full animate-spin" />
+            </div>
+          ) : data.length === 0 ? (
+            <p className="p-8 text-center text-slate-400 text-sm">{q ? 'Sin resultados para esta búsqueda' : 'No hay colaboradores'}</p>
+          ) : (
+            data.map((c) => (
+              <MobileCard
+                key={c.id}
+                top={
+                  <>
+                    <Link to={`/colaboradores/${c.id}`} className="text-gold-600 font-medium hover:underline">{c.nombre}</Link>
+                    <Badge estado={c.tipo} />
+                  </>
+                }
+                meta={`${c.empresa || '—'} · ${c.departamento || '—'} · Ingreso: ${fecha(c.fecha_ingreso)}`}
+              />
+            ))
+          )}
+        </div>
       </Card>
 
       {/* Paginación inferior */}
@@ -227,7 +262,7 @@ export default function Colaboradores() {
             <button
               onClick={() => setPagina((p) => Math.max(1, p - 1))}
               disabled={pagina <= 1}
-              className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-3 md:p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronLeft size={18} />
             </button>
@@ -251,7 +286,7 @@ export default function Colaboradores() {
             <button
               onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
               disabled={pagina >= totalPaginas}
-              className="p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-3 md:p-1.5 rounded hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <ChevronRight size={18} />
             </button>

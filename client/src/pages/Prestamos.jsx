@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Pencil, Trash2 } fro
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import KpiCard from '../components/KpiCard.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -270,7 +271,7 @@ export default function Prestamos() {
           </div>
         </div>
 
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Colaborador</th>
@@ -337,6 +338,64 @@ export default function Prestamos() {
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {data.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin préstamos con este filtro.</p>}
+          {data.map((p) => (
+            <Fragment key={p.id}>
+              <MobileCard
+                top={
+                  <>
+                    <span>
+                      <Link to={`/colaboradores/${p.colaborador_id}`} className="text-gold-600 font-medium hover:underline">
+                        {p.colaborador_nombre}
+                      </Link>
+                      <span className={`badge ml-2 ${p.tipo === 'ANTICIPO' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {p.tipo === 'ANTICIPO' ? 'ANTICIPO' : 'PRÉSTAMO'}
+                      </span>
+                      {!p.activo && <span className="badge bg-emerald-100 text-emerald-700 ml-2">PAGADO</span>}
+                    </span>
+                    <span className="font-semibold text-slate-700 shrink-0">{money(p.saldo_pendiente)}</span>
+                  </>
+                }
+                meta={<BarraProgreso prestamo={p} />}
+                footer={
+                  <div className="w-full flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        Cuota {money(p.cuota_quincena)}
+                        {p.activo && (
+                          <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 p-2" title="Editar cuota">
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                      </span>
+                      <span>{fecha(p.fecha_inicio)}</span>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-2">
+                      {p.activo && (
+                        <>
+                          <button onClick={() => setModalAbono({ prestamo: p, montoInicial: '' })} className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Abonar</button>
+                          <button onClick={() => setModalAbono({ prestamo: p, montoInicial: p.saldo_pendiente })} className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Precancelar</button>
+                        </>
+                      )}
+                      {sinPagos(p) && (
+                        <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 p-2" title="Eliminar">
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                      <button onClick={() => setExpandido(expandido === p.id ? null : p.id)}
+                        className="text-slate-400 hover:text-slate-700 p-2 ml-auto" title="Ver abonos y notas">
+                        {expandido === p.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                }
+              />
+              {expandido === p.id && <div className="-mt-1"><DetalleAbonos prestamoId={p.id} /></div>}
+            </Fragment>
+          ))}
+        </div>
 
         <div className="flex items-center justify-between p-4 text-sm text-slate-500">
           <span>{total} préstamo{total !== 1 && 's'}</span>

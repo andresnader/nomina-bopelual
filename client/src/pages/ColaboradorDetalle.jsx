@@ -4,6 +4,7 @@ import { Download, Pencil, Star, Trash2 } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { money, fecha } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
@@ -16,6 +17,7 @@ import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 const TABS_BASE = ['Ficha', 'Horario', 'Contratos', 'Ingresos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
 function FichaTab({ col, onGuardado, onError }) {
+  const toast = useToast();
   const [bancos, setBancos] = useState([]);
   const [horarios, setHorarios] = useState([]);
   useEffect(() => {
@@ -25,6 +27,7 @@ function FichaTab({ col, onGuardado, onError }) {
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
     departamento: col.departamento ?? '', cargo: col.cargo ?? '', fecha_ingreso: col.fecha_ingreso?.slice(0, 10) ?? '',
+    clasificacion: col.clasificacion ?? 'ADMINISTRATIVO',
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
     cuenta_bancaria: col.cuenta_bancaria ?? '', forma_pago: col.forma_pago ?? 'TRANSFERENCIA',
@@ -51,6 +54,7 @@ function FichaTab({ col, onGuardado, onError }) {
         direccion: form.direccion || null,
         horario: form.horario || null,
       });
+      toast.success('Datos guardados.');
       onGuardado();
     } catch (err) {
       onError(err.message);
@@ -72,6 +76,13 @@ function FichaTab({ col, onGuardado, onError }) {
           <label className="text-sm text-slate-600">Email {campo('email', { type: 'email' })}</label>
           <label className="text-sm text-slate-600">Departamento {campo('departamento')}</label>
           <label className="text-sm text-slate-600">Cargo {campo('cargo')}</label>
+          <label className="text-sm text-slate-600">Clasificación (archivo de pago)
+            <select className="input w-full" value={form.clasificacion}
+              onChange={(e) => setForm({ ...form, clasificacion: e.target.value })}>
+              <option value="ADMINISTRATIVO">Administrativo</option>
+              <option value="COMERCIAL">Comercial</option>
+            </select>
+          </label>
           <label className="text-sm text-slate-600">Fecha de nacimiento {campo('fecha_nacimiento', { type: 'date' })}</label>
           <label className="text-sm text-slate-600">Sexo
             <select className="input w-full" value={form.sexo} onChange={(e) => setForm({ ...form, sexo: e.target.value })}>
@@ -404,7 +415,7 @@ function ContratosTab({ col, onCambio, onError }) {
         </form>
       </Card>
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Sueldo</th><th className="p-3">Bono</th><th className="p-3">Desde</th><th className="p-3">Hasta</th><th className="p-3">Tipo</th><th className="p-3">Notas</th><th className="p-3">Emisión</th><th className="p-3"></th>
@@ -474,12 +485,76 @@ function ContratosTab({ col, onCambio, onError }) {
             ))}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {col.contratos.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin contratos registrados.</p>}
+          {col.contratos.map((c) => editId === c.id ? (
+            <div key={c.id} className="card p-3 grid gap-2">
+              <label className="text-xs text-slate-500">Sueldo base
+                <input type="number" step="0.01" className="input w-full mt-1" value={editForm.sueldo_base ?? c.sueldo_base}
+                  onChange={(e) => setEditForm({ ...editForm, sueldo_base: e.target.value })} />
+              </label>
+              <label className="text-xs text-slate-500">Bono mensual
+                <input type="number" step="0.01" className="input w-full mt-1" value={editForm.bono ?? c.bono ?? ''}
+                  onChange={(e) => setEditForm({ ...editForm, bono: e.target.value })} />
+              </label>
+              <label className="text-xs text-slate-500">Desde
+                <input type="date" className="input w-full mt-1" value={editForm.fecha_inicio ?? c.fecha_inicio?.slice(0, 10)}
+                  onChange={(e) => setEditForm({ ...editForm, fecha_inicio: e.target.value })} />
+              </label>
+              <label className="text-xs text-slate-500">Tipo de contrato
+                <select className="input w-full mt-1" value={editForm.tipo_contrato ?? c.tipo_contrato ?? ''}
+                  onChange={(e) => setEditForm({ ...editForm, tipo_contrato: e.target.value })}>
+                  <option value="">—</option>
+                  {tiposContrato.map((t) => <option key={t.codigo} value={t.codigo}>{t.nombre}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-slate-500">Notas
+                <input className="input w-full mt-1" value={editForm.notas ?? c.notas ?? ''}
+                  onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} />
+              </label>
+              <div className="flex gap-3 pt-1">
+                <button className="text-sm text-emerald-600 font-medium" onClick={() => guardarEdicion(c)}>Guardar</button>
+                <button className="text-sm text-slate-400" onClick={() => { setEditId(null); setEditForm({}); }}>Cancelar</button>
+              </div>
+            </div>
+          ) : (
+            <MobileCard
+              key={c.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{money(c.sueldo_base)}</span>
+                  {c.fecha_fin ? <span className="text-slate-500 text-xs">{fecha(c.fecha_fin)}</span> : <span className="badge bg-emerald-100 text-emerald-700">VIGENTE</span>}
+                </>
+              }
+              meta={
+                <div className="space-y-1">
+                  <div>{c.bono ? `Bono ${money(c.bono)} · ` : ''}Desde {fecha(c.fecha_inicio)} · {tiposContrato.find((t) => t.codigo === c.tipo_contrato)?.nombre ?? c.tipo_contrato ?? 'Sin tipo'}</div>
+                  {c.notas && <div>Notas: {c.notas}</div>}
+                  <EmisionCell contrato={c} colaboradorId={col.id} onCambio={onCambio} onError={onError} />
+                </div>
+              }
+              footer={
+                <>
+                  <button className="text-slate-400 hover:text-gold-600 p-2 -m-2 flex items-center gap-1" onClick={() => { setEditId(c.id); setEditForm({}); }}>
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button className="text-red-500 hover:text-red-700 p-2 -m-2" onClick={async () => {
+                    if (!confirm('¿Eliminar este contrato?')) return;
+                    try { await api.del(`/colaboradores/${col.id}/contratos/${c.id}`); onCambio(); }
+                    catch (err) { onError(err.message); }
+                  }}>Eliminar</button>
+                </>
+              }
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );
 }
 
-const RUBROS_TIPO = [
+export const RUBROS_TIPO = [
   { value: 'SUELDO', label: 'Sueldo' },
   { value: 'ALIMENTACION', label: 'Alimentación' },
   { value: 'TRANSPORTE', label: 'Transporte' },
@@ -736,7 +811,7 @@ function PrestamosTab({ col, onError }) {
       </Card>
 
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3 text-right">Total</th>
@@ -778,6 +853,50 @@ function PrestamosTab({ col, onError }) {
             {prestamos.length === 0 && <tr><td colSpan={5} className="p-4 text-slate-500">Sin préstamos registrados.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {prestamos.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin préstamos registrados.</p>}
+          {prestamos.map((p) => (
+            <MobileCard
+              key={p.id}
+              className={!p.activo ? 'opacity-50' : ''}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{money(p.monto_total)}</span>
+                  <span className="font-semibold text-slate-700">{money(p.saldo_pendiente)}</span>
+                </>
+              }
+              meta={
+                <span>
+                  Cuota {money(p.cuota_quincena)}
+                  {p.activo && (
+                    <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 p-2" title="Editar cuota">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {' '}· 1ra desc. {fecha(p.fecha_inicio)}
+                </span>
+              }
+              footer={
+                <>
+                  <span className="flex items-center flex-wrap gap-2">
+                    {p.activo && (
+                      <>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: '' })}
+                          className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Abonar</button>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: p.saldo_pendiente })}
+                          className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Precancelar</button>
+                      </>
+                    )}
+                  </span>
+                  <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 p-2 -m-2 shrink-0" title="Eliminar">
+                    <Trash2 size={15} />
+                  </button>
+                </>
+              }
+            />
+          ))}
+        </div>
       </Card>
 
       <AbonoModal prestamo={modalAbono?.prestamo} montoInicial={modalAbono?.montoInicial}
@@ -860,7 +979,7 @@ function AnticiposTab({ col, onError }) {
       </Card>
 
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3 text-right">Total</th>
@@ -904,6 +1023,52 @@ function AnticiposTab({ col, onError }) {
             {anticipos.length === 0 && <tr><td colSpan={5} className="p-4 text-slate-500">Sin anticipos registrados.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {anticipos.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin anticipos registrados.</p>}
+          {anticipos.map((p) => (
+            <MobileCard
+              key={p.id}
+              className={!p.activo ? 'opacity-50' : ''}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{money(p.monto_total)}</span>
+                  <span className="font-semibold text-slate-700">{money(p.saldo_pendiente)}</span>
+                </>
+              }
+              meta={
+                <span>
+                  Cuota {money(p.cuota_quincena)}
+                  {p.activo && (
+                    <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 p-2" title="Editar cuota">
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                  {' '}· 1ra desc. {fecha(p.fecha_inicio)}
+                </span>
+              }
+              footer={
+                <>
+                  <span className="flex items-center flex-wrap gap-2">
+                    {p.activo && (
+                      <>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: '' })}
+                          className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Abonar</button>
+                        <button onClick={() => setModalAbono({ prestamo: p, montoInicial: p.saldo_pendiente })}
+                          className="btn btn-secondary !px-2.5 !py-1.5 text-xs">Precancelar</button>
+                      </>
+                    )}
+                  </span>
+                  {Number(p.saldo_pendiente) === Number(p.monto_total) && (
+                    <button onClick={() => eliminar(p)} className="text-slate-400 hover:text-red-600 p-2 -m-2 shrink-0" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </>
+              }
+            />
+          ))}
+        </div>
       </Card>
 
       <AbonoModal prestamo={modalAbono?.prestamo} montoInicial={modalAbono?.montoInicial}
@@ -1016,7 +1181,7 @@ function HorarioTab({ col, onError, onCambio }) {
         </p>
       </Card>
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Fecha</th><th className="p-3">Tardanza</th><th className="p-3">Salida anticipada</th>
@@ -1054,6 +1219,47 @@ function HorarioTab({ col, onError, onCambio }) {
             {incidencias.length === 0 && <tr><td colSpan={6} className="p-4 text-slate-500">Sin incidencias registradas.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {incidencias.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin incidencias registradas.</p>}
+          {incidencias.map((inc) => (
+            <MobileCard
+              key={inc.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{fecha(inc.fecha)}</span>
+                  {inc.lineas_rol_id
+                    ? <span className="badge bg-emerald-100 text-emerald-700">APLICADA</span>
+                    : <span className="badge bg-amber-100 text-amber-700">PENDIENTE</span>}
+                </>
+              }
+              meta={
+                <span className="flex items-center justify-between">
+                  <span>
+                    {inc.minutos_tardanza > 0 ? `Tardanza ${inc.minutos_tardanza} min` : ''}
+                    {inc.minutos_tardanza > 0 && inc.minutos_salida_anticipada > 0 ? ' · ' : ''}
+                    {inc.minutos_salida_anticipada > 0 ? `Salida anticipada ${inc.minutos_salida_anticipada} min` : ''}
+                  </span>
+                  <span className="font-medium text-slate-700">{money(inc.monto_total)}</span>
+                </span>
+              }
+              footer={
+                !inc.lineas_rol_id && (
+                  <>
+                    <select className="input !py-1.5 !px-2 text-xs flex-1" defaultValue=""
+                      onChange={(e) => aplicar(inc.id, e.target.value)}>
+                      <option value="">Aplicar a...</option>
+                      {rolesBorrador.map((r) => <option key={r.id} value={r.id}>{r.periodo_nombre}</option>)}
+                    </select>
+                    <button onClick={() => eliminar(inc.id)} className="text-slate-400 hover:text-red-600 p-2 -m-2 shrink-0" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  </>
+                )
+              }
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );
@@ -1214,9 +1420,9 @@ function DocumentosTab({ col, onError }) {
 
   return (
     <div className="grid gap-4">
-      <Card>
+      <Card className="overflow-x-auto">
         <h2 className="font-semibold mb-3">Documentos emitibles</h2>
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Documento</th><th className="p-3">Emisión</th>
@@ -1233,6 +1439,16 @@ function DocumentosTab({ col, onError }) {
             ))}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2">
+          {DOCUMENTOS_COLABORADOR.map(d => (
+            <MobileCard
+              key={d.tipo}
+              top={<span className="font-medium text-slate-800">{d.label}</span>}
+              meta={<DocumentosColaboradorCell col={col} tipo={d.tipo} label={d.label} onError={onError} />}
+            />
+          ))}
+        </div>
       </Card>
       <Card>
         <h2 className="font-semibold mb-3">Subir documento (máx. 5 MB)</h2>
@@ -1245,7 +1461,7 @@ function DocumentosTab({ col, onError }) {
         </div>
       </Card>
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Documento</th><th className="p-3">Tipo</th><th className="p-3 text-right">Tamaño</th><th className="p-3">Subido</th><th className="p-3"></th>
@@ -1260,10 +1476,10 @@ function DocumentosTab({ col, onError }) {
                 <td className="p-3 text-slate-500">{fecha(d.creado_en)}</td>
                 <td className="p-3 text-right whitespace-nowrap">
                   <a href={`/api/colaboradores/${col.id}/documentos/${d.id}`}
-                    className="inline-block text-slate-400 hover:text-gold-600 p-1.5" title="Descargar">
+                    className="inline-block text-slate-400 hover:text-gold-600 p-3 md:p-1.5" title="Descargar">
                     <Download size={15} />
                   </a>
-                  <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-1.5" title="Eliminar">
+                  <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-3 md:p-1.5" title="Eliminar">
                     <Trash2 size={15} />
                   </button>
                 </td>
@@ -1272,6 +1488,33 @@ function DocumentosTab({ col, onError }) {
             {docs.length === 0 && <tr><td colSpan={5} className="p-4 text-slate-500">Sin documentos.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {docs.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin documentos.</p>}
+          {docs.map((d) => (
+            <MobileCard
+              key={d.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800 truncate">{d.nombre}</span>
+                  <span className="badge bg-slate-100 text-slate-600 shrink-0">{d.tipo}</span>
+                </>
+              }
+              meta={`${(d.bytes / 1024).toFixed(0)} KB · Subido ${fecha(d.creado_en)}`}
+              footer={
+                <>
+                  <a href={`/api/colaboradores/${col.id}/documentos/${d.id}`}
+                    className="text-gold-600 p-2 -m-2" title="Descargar">
+                    <Download size={15} />
+                  </a>
+                  <button onClick={() => eliminar(d)} className="text-slate-400 hover:text-red-600 p-2 -m-2" title="Eliminar">
+                    <Trash2 size={15} />
+                  </button>
+                </>
+              }
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );
@@ -1317,7 +1560,7 @@ function EvaluacionesTab({ col, onError }) {
         </form>
       </Card>
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Fecha</th><th className="p-3">Calificación</th><th className="p-3">Fortalezas</th><th className="p-3">Oportunidades</th><th className="p-3">Evaluador</th>
@@ -1336,6 +1579,28 @@ function EvaluacionesTab({ col, onError }) {
             {evaluaciones.length === 0 && <tr><td colSpan={5} className="p-4 text-slate-500">Sin evaluaciones.</td></tr>}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {evaluaciones.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin evaluaciones.</p>}
+          {evaluaciones.map((ev) => (
+            <MobileCard
+              key={ev.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{fecha(ev.fecha)}</span>
+                  {estrellas(ev.calificacion)}
+                </>
+              }
+              meta={
+                <div className="space-y-1">
+                  <div>Fortalezas: {ev.fortalezas || '—'}</div>
+                  <div>Oportunidades: {ev.oportunidades || '—'}</div>
+                  <div>Evaluador: {ev.evaluador_email || '—'}</div>
+                </div>
+              }
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );
@@ -1362,7 +1627,7 @@ function FacturasTab({ col }) {
 function RolesTab({ col }) {
   return (
     <Card className="p-0 overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="hidden md:table w-full text-sm">
         <thead className="text-slate-500 text-left">
           <tr className="border-b border-slate-200">
             <th className="p-3">Período</th><th className="p-3 text-right">Neto</th><th className="p-3">Estado</th>
@@ -1383,6 +1648,22 @@ function RolesTab({ col }) {
           {col.roles_pago.length === 0 && <tr><td colSpan={3} className="p-4 text-slate-500">Sin roles aún.</td></tr>}
         </tbody>
       </table>
+
+      <div className="md:hidden space-y-2 p-2">
+        {col.roles_pago.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin roles aún.</p>}
+        {col.roles_pago.map((r) => (
+          <MobileCard
+            key={r.id}
+            top={
+              <>
+                <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">{r.periodo_nombre}</Link>
+                <Badge estado={r.estado_pago} />
+              </>
+            }
+            meta={`Neto: ${money(r.neto)}`}
+          />
+        ))}
+      </div>
     </Card>
   );
 }
@@ -1404,13 +1685,21 @@ export default function ColaboradorDetalle() {
 
   return (
     <div className="animate-fade-in">
-      <PageTitle>
+      <PageTitle volver={{ to: '/colaboradores', label: 'Volver a Colaboradores' }}>
         {col.nombre} <Badge estado={col.tipo} />
         {col.empresa && <span className="badge bg-slate-100 text-slate-600 ml-1">{col.empresa}</span>}
       </PageTitle>
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
-      <div className="flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto">
+      <select
+        value={tab}
+        onChange={(e) => { setTab(e.target.value); setError(null); }}
+        className="input w-full mb-4 md:hidden"
+      >
+        {tabs.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+
+      <div className="hidden md:flex gap-1 mb-4 border-b border-slate-200 overflow-x-auto">
         {tabs.map((t) => (
           <button key={t} onClick={() => { setTab(t); setError(null); }}
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors ${

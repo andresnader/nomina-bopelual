@@ -37,6 +37,27 @@ describe('anticipo quincena', () => {
   it('porcentaje configurable', () => expect(calc.anticipoQuincena(1000, 0.5)).toBe(500));
 });
 
+describe('factor de prorrateo por ingreso a mitad de quincena', () => {
+  it('quincena completa si ingresó antes del inicio del período', () => {
+    expect(calc.factorProrrateoIngreso('2026-06-15', '2026-07-01', '2026-07-15')).toBe(1);
+  });
+  it('quincena completa si ingresó el mismo día del inicio del período', () => {
+    expect(calc.factorProrrateoIngreso('2026-07-01', '2026-07-01', '2026-07-15')).toBe(1);
+  });
+  it('prorratea si ingresó a mitad del período (6 de 15 días)', () => {
+    expect(calc.factorProrrateoIngreso('2026-07-10', '2026-07-01', '2026-07-15')).toBe(0.4);
+  });
+  it('prorratea al mínimo si ingresó el último día del período (1 de 15 días)', () => {
+    expect(calc.factorProrrateoIngreso('2026-07-15', '2026-07-01', '2026-07-15')).toBe(0.07);
+  });
+  it('factor 0 si ingresó después de que terminó el período', () => {
+    expect(calc.factorProrrateoIngreso('2026-07-20', '2026-07-01', '2026-07-15')).toBe(0);
+  });
+  it('sin fecha de ingreso, no prorratea (quincena completa)', () => {
+    expect(calc.factorProrrateoIngreso(null, '2026-07-01', '2026-07-15')).toBe(1);
+  });
+});
+
 describe('calcularTotales', () => {
   const lineas = [
     { clase: 'INGRESO', monto: 1000, es_provision: false }, // sueldo

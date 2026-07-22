@@ -39,7 +39,8 @@ describe('reportes', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/csv');
     expect(res.text).toContain('colaborador,tipo,total_ingresos');
-    expect(res.text).toContain('CSV Col');
+    // El nombre se guarda en mayúsculas.
+    expect(res.text).toContain('CSV COL');
   });
 
   it('neutraliza fórmulas CSV en nombres maliciosos', async () => {
@@ -111,7 +112,7 @@ describe('reportes', () => {
       colaborador_id: prov.id, fecha_factura: '2026-07-05', monto_bruto: 1000
     });
     const res = await auth(request(app).get('/api/reportes/retenciones-proveedor'));
-    const fila = res.body.find((r) => r.proveedor.includes('RetProv'));
+    const fila = res.body.find((r) => r.proveedor.includes('RETPROV'));
     expect(Number(fila.total_retencion)).toBe(100);
   });
 
@@ -125,7 +126,7 @@ describe('reportes', () => {
       [col.id]
     );
     const res = await auth(request(app).get('/api/reportes/provisiones?anio=2099'));
-    expect(res.body.some((r) => r.colaborador.includes('Provis') && Number(r.decimo_tercero) === 50)).toBe(true);
+    expect(res.body.some((r) => r.colaborador.includes('PROVIS') && Number(r.decimo_tercero) === 50)).toBe(true);
   });
 
   it('decimos-periodo devuelve el desglose de un período cerrado', async () => {
@@ -147,7 +148,7 @@ describe('reportes', () => {
 
     const res = await auth(request(app).get(`/api/reportes/decimos-periodo?periodo_id=${periodoId}`));
     expect(res.status).toBe(200);
-    const fila = res.body.find((r) => r.colaborador.includes('Decimos'));
+    const fila = res.body.find((r) => r.colaborador.includes('DECIMOS'));
     expect(Number(fila.decimo_tercero)).toBeCloseTo(100, 2);
     expect(Number(fila.decimo_cuarto)).toBeGreaterThan(0);
     expect(Number(fila.fondos_reserva)).toBeGreaterThan(0);

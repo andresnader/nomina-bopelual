@@ -2,6 +2,7 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
 import { esTipoContratoValido } from '../lib/tipos-contrato.js';
+import { agregarColaboradorAPeriodosBorrador } from '../services/periodos.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -55,12 +56,15 @@ router.get('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 });
 
 router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso } = req.body;
+  const { tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, clasificacion } = req.body;
   if (!tipo || !nombre) return res.status(400).json({ error: 'tipo y nombre requeridos' });
+  if (clasificacion && !['COMERCIAL', 'ADMINISTRATIVO'].includes(clasificacion)) {
+    return res.status(400).json({ error: `clasificacion inválida: ${clasificacion}` });
+  }
   const { rows } = await pool.query(
-    `INSERT INTO colaboradores (tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso]
+    `INSERT INTO colaboradores (tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, clasificacion)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'ADMINISTRATIVO')) RETURNING *`,
+    [tipo, cedula, nombre.toUpperCase(), email, departamento, cargo, fecha_ingreso, clasificacion || null]
   );
   res.status(201).json(rows[0]);
 });
@@ -114,11 +118,12 @@ router.get(
 router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   const campos = [
     'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso',
-    'empresa', 'centro_costo', 'cargas_personales', 'forma_pago',
+    'empresa', 'centro_costo', 'cargas_personales', 'forma_pago', 'clasificacion',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
     'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal'
   ];
+  if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
   const set = [];
   const params = [];
   for (const c of campos) {
@@ -162,8 +167,11 @@ router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) =
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [req.params.id, sueldo_base, fecha_inicio, notas, tipo_contrato ?? null, bono ?? 0]
     );
+    // Si hay período(s) en BORRADOR, el colaborador entra de inmediato (con
+    // prorrateo si ingresó a mitad de quincena); no duplica si ya tenía rol.
+    const { agregados } = await agregarColaboradorAPeriodosBorrador(client, req.params.id);
     await client.query('COMMIT');
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], periodos_borrador_agregado: agregados });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });

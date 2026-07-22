@@ -28,6 +28,19 @@ describe('Modal', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('el diálogo ocupa toda la pantalla en móvil y tiene ancho acotado desde md', () => {
+    render(<Modal open={true} onClose={() => {}} title="X" size="md">contenido</Modal>);
+    const dialogo = screen.getByRole('dialog');
+    expect(dialogo.className).toMatch(/\bh-full\b/);
+    expect(dialogo.className).toMatch(/\bmd:max-w-md\b/);
+  });
+
+  it('el cuerpo del modal scrollea independiente del header y el footer', () => {
+    render(<Modal open={true} onClose={() => {}} title="X" footer={<button>Guardar</button>}>contenido</Modal>);
+    const cuerpo = screen.getByRole('dialog').children[1];
+    expect(cuerpo.className).toMatch(/overflow-y-auto/);
+  });
 });
 
 function Disparador() {

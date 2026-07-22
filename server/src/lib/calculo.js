@@ -1,5 +1,8 @@
 import { TASAS } from './tasas.js';
 import { round2 } from './round.js';
+import { diasEntre } from './vacaciones.js';
+
+const DIAS_QUINCENA = 15;
 
 // --- Aportes IESS ---
 export const iessPersonal = (sueldoBase) => round2(sueldoBase * TASAS.IESS_PERSONAL);
@@ -29,6 +32,18 @@ export function cuotaPrestamo(cuota, saldoPendiente) {
 
 // --- Anticipo de primera quincena (porcentaje configurable vía parámetros) ---
 export const anticipoQuincena = (sueldoBase, porcentaje = 0.4) => round2(sueldoBase * porcentaje);
+
+// --- Prorrateo por ingreso a mitad de quincena (solo IESS) ---
+// Convención ecuatoriana: quincena completa = 15 días, sin importar el
+// largo real del mes. Si el colaborador ya trabajaba antes del período,
+// factor 1 (sin prorrateo); si ingresa después de que terminó, factor 0.
+export function factorProrrateoIngreso(fechaIngreso, periodoFechaInicio, periodoFechaFin) {
+  if (!fechaIngreso) return 1;
+  if (new Date(fechaIngreso) <= new Date(periodoFechaInicio)) return 1;
+  if (new Date(fechaIngreso) > new Date(periodoFechaFin)) return 0;
+  const diasTrabajados = Math.min(diasEntre(fechaIngreso, periodoFechaFin), DIAS_QUINCENA);
+  return round2(diasTrabajados / DIAS_QUINCENA);
+}
 
 // --- Totales del rol de pago ---
 // El neto en efectivo EXCLUYE las provisiones (son ingresos contables, no cash).

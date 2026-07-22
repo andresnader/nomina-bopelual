@@ -4,6 +4,7 @@ import { Download, RefreshCw } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
+import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -109,9 +110,12 @@ export default function PeriodoDetalle() {
 
   if (!periodo) return <Card>{error || 'Cargando…'}</Card>;
 
+  const filas = periodo.roles_pago.filter((r) => !empresa || r.colaborador_empresa === empresa);
+
   return (
     <div>
       <PageTitle
+        volver={{ to: '/periodos', label: 'Volver a Períodos' }}
         accion={
           <div className="flex gap-2">
             {periodo.estado === 'BORRADOR' && (
@@ -159,7 +163,7 @@ export default function PeriodoDetalle() {
       </Card>
 
       <Card className="p-0 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="hidden md:table w-full text-sm">
           <thead className="text-slate-500 text-left">
             <tr className="border-b border-slate-200">
               <th className="p-3">Colaborador</th>
@@ -172,9 +176,7 @@ export default function PeriodoDetalle() {
             </tr>
           </thead>
           <tbody>
-            {periodo.roles_pago
-              .filter((r) => !empresa || r.colaborador_empresa === empresa)
-              .map((r) => (
+            {filas.map((r) => (
               <tr key={r.id} className="border-b border-slate-200 hover:bg-slate-50">
                 <td className="p-3">
                   <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">
@@ -189,13 +191,40 @@ export default function PeriodoDetalle() {
                 <td className="p-3"><Badge estado={r.estado_pago} /></td>
               </tr>
             ))}
-            {periodo.roles_pago.filter((r) => !empresa || r.colaborador_empresa === empresa).length === 0 && (
+            {filas.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-500">No hay colaboradores para el filtro seleccionado</td>
               </tr>
             )}
           </tbody>
         </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {filas.length === 0 && <p className="p-4 text-slate-500 text-sm">No hay colaboradores para el filtro seleccionado</p>}
+          {filas.map((r) => (
+            <MobileCard
+              key={r.id}
+              top={
+                <>
+                  <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">{r.colaborador_nombre}</Link>
+                  <Badge estado={r.estado_pago} />
+                </>
+              }
+              meta={
+                <span className="flex items-center justify-between">
+                  <span>{r.colaborador_empresa || '—'} · <Badge estado={r.colaborador_tipo} /></span>
+                  <span className="font-semibold text-slate-700">{money(r.neto)}</span>
+                </span>
+              }
+              footer={
+                <>
+                  <span>Ingresos {money(r.total_ingresos)}</span>
+                  <span>Descuentos {money(r.total_descuentos)}</span>
+                </>
+              }
+            />
+          ))}
+        </div>
       </Card>
     </div>
   );

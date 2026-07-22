@@ -161,18 +161,24 @@ describe('préstamos', () => {
     expect(res.status).toBe(400);
   });
 
-  it('solo se eliminan préstamos sin pagos aplicados', async () => {
+  it('préstamos con pagos aplicados se desactivan en vez de borrarse', async () => {
     const app = createApp();
     const conAbono = await crearPrestamo(app);
     await auth(request(app).post(`/api/prestamos/${conAbono.id}/abonos`)).send({ monto: 50 });
-    const bloqueado = await auth(request(app).del(`/api/prestamos/${conAbono.id}`));
-    expect(bloqueado.status).toBe(409);
+    const desactivado = await auth(request(app).del(`/api/prestamos/${conAbono.id}`));
+    expect(desactivado.status).toBe(200);
+    expect(desactivado.body.eliminado).toBe('desactivado');
+
+    const det = await auth(request(app).get(`/api/prestamos/${conAbono.id}`));
+    expect(det.status).toBe(200);
+    expect(det.body.activo).toBe(false);
 
     const limpio = await crearPrestamo(app);
     const ok = await auth(request(app).del(`/api/prestamos/${limpio.id}`));
     expect(ok.status).toBe(200);
-    const det = await auth(request(app).get(`/api/prestamos/${limpio.id}`));
-    expect(det.status).toBe(404);
+    expect(ok.body.eliminado).toBe('borrado');
+    const detLimpio = await auth(request(app).get(`/api/prestamos/${limpio.id}`));
+    expect(detLimpio.status).toBe(404);
   });
 
   it('valida cuota mayor a 0 y no superior al monto', async () => {
