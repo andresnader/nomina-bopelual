@@ -3,6 +3,7 @@ import pool from '../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
 import { crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo } from '../services/periodos.js';
 import { generarTxtPichincha } from '../lib/txt-pichincha.js';
+import { generarExcelNomina } from '../lib/excel-nomina.js';
 import { round2 } from '../lib/round.js';
 
 const router = Router();
@@ -75,8 +76,24 @@ function accionHandler(accion) {
     }
   };
 }
-router.post('/:id/aprobar', requireRole(['RRHH']), accionHandler('aprobar'));
-router.post('/:id/cerrar', requireRole(['RRHH']), accionHandler('cerrar'));
+router.post('/:id/aprobar', requireRole(['ADMIN', 'RRHH']), accionHandler('aprobar'));
+router.post('/:id/cerrar', requireRole(['ADMIN', 'RRHH']), accionHandler('cerrar'));
+
+// Marca/desmarca si un rol se paga por el TXT masivo del banco. El Excel de
+// la nómina no se ve afectado: siempre incluye a todos. No se restringe por
+// estado del período porque el TXT se regenera incluso después de cerrado.
+router.patch('/:id/roles/:rolId/incluir-txt', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { incluir } = req.body;
+  if (typeof incluir !== 'boolean') return res.status(400).json({ error: 'incluir (boolean) requerido' });
+  const { rows } = await pool.query(
+    `UPDATE roles_pago SET incluir_en_txt=$1
+     WHERE id=$2 AND periodo_id=$3
+     RETURNING id, incluir_en_txt`,
+    [incluir, req.params.rolId, req.params.id]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'rol no encontrado en este período' });
+  res.json(rows[0]);
+});
 
 // Sincroniza de una sola vez los préstamos/descuentos de TODOS los roles del período
 // (equivalente a llamar /roles/:id/sincronizar por cada colaborador).
@@ -115,11 +132,13 @@ router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => 
 
   const params = [req.params.id];
   if (empresa) params.push(empresa);
+  // Solo entran los roles marcados para pago por TXT (incluir_en_txt); los
+  // desmarcados se pagan por otro medio y ni siquiera se reportan aquí.
   const { rows } = await pool.query(
     `SELECT rp.neto, c.nombre, c.cedula, c.cuenta_bancaria, c.tipo_cuenta, c.codigo_banco,
             c.forma_pago
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
-     WHERE rp.periodo_id=$1 AND rp.neto > 0
+     WHERE rp.periodo_id=$1 AND rp.neto > 0 AND rp.incluir_en_txt
        ${empresa ? 'AND c.empresa=$2' : ''}
        ${grupo ? `AND ${FILTRO_GRUPO[grupo]}` : ''}
      ORDER BY c.nombre`,
@@ -147,6 +166,42 @@ router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => 
     incluidos: pagables.length,
     total: round2(pagables.reduce((s, r) => s + Number(r.neto), 0)),
     excluidos,
+  });
+});
+
+// Excel de la nómina del período: hoja resumen (una fila por colaborador) +
+// hoja detalle (todas las líneas). Incluye a TODOS los roles, marcados o no
+// para TXT. Se devuelve como JSON con base64 (mismo patrón que el TXT) para
+// no romper el manejo de respuestas del cliente.
+router.get('/:id/excel', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { rows: p } = await pool.query('SELECT * FROM periodos WHERE id=$1', [req.params.id]);
+  if (p.length === 0) return res.status(404).json({ error: 'no encontrado' });
+
+  const { rows: roles } = await pool.query(
+    `SELECT rp.total_ingresos, rp.total_descuentos, rp.neto, rp.incluir_en_txt,
+            c.nombre, c.cedula, c.tipo, c.empresa, c.forma_pago
+     FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
+     WHERE rp.periodo_id=$1
+     ORDER BY c.nombre`,
+    [req.params.id]
+  );
+  const { rows: lineas } = await pool.query(
+    `SELECT c.nombre AS colaborador_nombre, l.clase, l.tipo_linea, l.descripcion, l.monto
+     FROM lineas_rol l
+     JOIN roles_pago rp ON rp.id=l.rol_pago_id
+     JOIN colaboradores c ON c.id=rp.colaborador_id
+     WHERE rp.periodo_id=$1
+     ORDER BY c.nombre, l.clase, l.creado_en`,
+    [req.params.id]
+  );
+
+  const buffer = generarExcelNomina(roles, lineas);
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  res.json({
+    archivo: `nomina_${slug(p[0].nombre)}.xlsx`,
+    contenidoBase64: buffer.toString('base64'),
+    incluidos: roles.length,
+    total: round2(roles.reduce((s, r) => s + Number(r.neto), 0)),
   });
 });
 
