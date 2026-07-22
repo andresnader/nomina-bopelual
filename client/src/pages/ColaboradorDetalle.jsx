@@ -16,6 +16,19 @@ import { FormFactura, TablaFacturas } from './Proveedores.jsx';
 
 const TABS_BASE = ['Ficha', 'Horario', 'Contratos', 'Ingresos', 'Descuentos', 'Préstamos', 'Anticipos', 'Ausencias', 'Documentos', 'Evaluaciones', 'Roles de pago'];
 
+// Dispara la descarga de un archivo servido por la API (los endpoints de
+// documentos responden Content-Disposition: attachment, así que basta con
+// navegar a la URL). Se usa tras "Generar y descargar" para que la descarga
+// empiece sola apenas se genera el DOCX.
+function descargarUrl(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function FichaTab({ col, onGuardado, onError }) {
   const toast = useToast();
   const [bancos, setBancos] = useState([]);
@@ -233,12 +246,22 @@ function EmitirContratoModal({ contrato, colaboradorId, onClose, onEmitido, onEr
   const [form, setForm] = useState(initial);
   const [enviando, setEnviando] = useState(false);
 
+  // Debe coincidir con CONFIG[...].tabla en contrato-emisiones-avanzadas.js
+  const TABLA_EMISION = {
+    COMISIONISTA: 'contrato_comisionista_emisiones',
+    SERVICIOS_PROFESIONALES: 'contrato_servicios_profesionales_emisiones',
+  };
+  const urlGenerado = (emisionId) => tipo === 'PRODUCTIVO' || !TABLA_EMISION[tipo]
+    ? `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones/${emisionId}/generado`
+    : `/api/colaboradores/${colaboradorId}/contratos/${contrato.id}/emisiones-avanzadas/${TABLA_EMISION[tipo]}/${emisionId}/generado`;
+
   const emitir = async (e) => {
     e.preventDefault();
     setEnviando(true);
     try {
       const body = { ...form, ...(config.extraBody || {}) };
-      await api.post(config.endpoint, body);
+      const emision = await api.post(config.endpoint, body);
+      descargarUrl(urlGenerado(emision.id));
       onEmitido();
     } catch (err) {
       onError(err.message);
@@ -1342,7 +1365,8 @@ function EmitirDocumentoColaboradorModal({ tipo, label, col, onClose, onEmitido,
     e.preventDefault();
     setEnviando(true);
     try {
-      await api.post(`/colaboradores/${col.id}/documentos-emitidos/${tipo}`, form);
+      const emision = await api.post(`/colaboradores/${col.id}/documentos-emitidos/${tipo}`, form);
+      descargarUrl(`/api/colaboradores/${col.id}/documentos-emitidos/${tipo}/${emision.id}/generado`);
       onEmitido();
     } catch (err) {
       onError(err.message);
