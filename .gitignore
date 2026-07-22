@@ -16,3 +16,8 @@ tema.png
 
 # Companion visual de brainstorming (superpowers)
 .superpowers/
+docs/superpowers/
+
+# Plantillas .docx de referencia legal (originales de los contratos): se
+# mantienen locales, no van al repo
+*.docx
