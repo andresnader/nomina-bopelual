@@ -179,7 +179,7 @@ router.get('/:id/excel', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 
   const { rows: roles } = await pool.query(
     `SELECT rp.total_ingresos, rp.total_descuentos, rp.neto, rp.incluir_en_txt,
-            c.nombre, c.cedula, c.tipo, c.empresa, c.forma_pago
+            c.nombre, c.cedula, c.tipo, c.empresa, c.forma_pago, c.clasificacion
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
      WHERE rp.periodo_id=$1
      ORDER BY c.nombre`,

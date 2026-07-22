@@ -33,16 +33,30 @@ export function cuotaPrestamo(cuota, saldoPendiente) {
 // --- Anticipo de primera quincena (porcentaje configurable vía parámetros) ---
 export const anticipoQuincena = (sueldoBase, porcentaje = 0.4) => round2(sueldoBase * porcentaje);
 
-// --- Prorrateo por ingreso a mitad de quincena (solo IESS) ---
+// --- Prorrateo por días efectivamente trabajados en la quincena (solo IESS) ---
 // Convención ecuatoriana: quincena completa = 15 días, sin importar el
-// largo real del mes. Si el colaborador ya trabajaba antes del período,
-// factor 1 (sin prorrateo); si ingresa después de que terminó, factor 0.
-export function factorProrrateoIngreso(fechaIngreso, periodoFechaInicio, periodoFechaFin) {
-  if (!fechaIngreso) return 1;
-  if (new Date(fechaIngreso) <= new Date(periodoFechaInicio)) return 1;
-  if (new Date(fechaIngreso) > new Date(periodoFechaFin)) return 0;
-  const diasTrabajados = Math.min(diasEntre(fechaIngreso, periodoFechaFin), DIAS_QUINCENA);
+// largo real del mes. El rango trabajado va de max(fecha_ingreso, inicio del
+// período) a min(fecha_salida, fin del período); si el rango es vacío (aún no
+// ingresa, o ya salió antes de este período), el factor es 0.
+export function factorProrrateo(fechaIngreso, fechaSalida, periodoFechaInicio, periodoFechaFin) {
+  const inicioEfectivo = fechaIngreso && new Date(fechaIngreso) > new Date(periodoFechaInicio)
+    ? fechaIngreso : periodoFechaInicio;
+  const finEfectivo = fechaSalida && new Date(fechaSalida) < new Date(periodoFechaFin)
+    ? fechaSalida : periodoFechaFin;
+  if (new Date(inicioEfectivo) > new Date(finEfectivo)) return 0;
+  const diasTrabajados = Math.min(diasEntre(inicioEfectivo, finEfectivo), DIAS_QUINCENA);
   return round2(diasTrabajados / DIAS_QUINCENA);
+}
+
+// Solo ingreso (sin fecha de salida): se mantiene como atajo para los
+// llamadores y tests que ya existían antes de fecha_salida.
+export function factorProrrateoIngreso(fechaIngreso, periodoFechaInicio, periodoFechaFin) {
+  return factorProrrateo(fechaIngreso, null, periodoFechaInicio, periodoFechaFin);
+}
+
+// Solo salida (p. ej. liquidación hasta el día trabajado).
+export function factorProrrateoSalida(fechaSalida, periodoFechaInicio, periodoFechaFin) {
+  return factorProrrateo(null, fechaSalida, periodoFechaInicio, periodoFechaFin);
 }
 
 // --- Totales del rol de pago ---

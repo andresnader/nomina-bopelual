@@ -58,6 +58,39 @@ describe('factor de prorrateo por ingreso a mitad de quincena', () => {
   });
 });
 
+describe('factor de prorrateo por salida a mitad de quincena', () => {
+  it('quincena completa si sale después de que termina el período', () => {
+    expect(calc.factorProrrateoSalida('2026-07-20', '2026-07-01', '2026-07-15')).toBe(1);
+  });
+  it('quincena completa si sale el último día del período', () => {
+    expect(calc.factorProrrateoSalida('2026-07-15', '2026-07-01', '2026-07-15')).toBe(1);
+  });
+  it('prorratea si sale a mitad del período (10 de 15 días)', () => {
+    expect(calc.factorProrrateoSalida('2026-07-10', '2026-07-01', '2026-07-15')).toBe(0.67);
+  });
+  it('prorratea al mínimo si sale el primer día del período (1 de 15 días)', () => {
+    expect(calc.factorProrrateoSalida('2026-07-01', '2026-07-01', '2026-07-15')).toBe(0.07);
+  });
+  it('factor 0 si ya había salido antes de que empiece el período', () => {
+    expect(calc.factorProrrateoSalida('2026-06-28', '2026-07-01', '2026-07-15')).toBe(0);
+  });
+  it('sin fecha de salida, no prorratea (quincena completa)', () => {
+    expect(calc.factorProrrateoSalida(null, '2026-07-01', '2026-07-15')).toBe(1);
+  });
+});
+
+describe('factor de prorrateo combinado (ingreso y salida en el mismo período)', () => {
+  it('cuenta solo los días entre el ingreso y la salida (3 de 15 días)', () => {
+    expect(calc.factorProrrateo('2026-07-10', '2026-07-12', '2026-07-01', '2026-07-15')).toBe(0.2);
+  });
+  it('ingreso antes y salida a mitad: prorratea por salida', () => {
+    expect(calc.factorProrrateo('2026-06-01', '2026-07-08', '2026-07-01', '2026-07-15')).toBe(0.53);
+  });
+  it('salida posterior e ingreso a mitad: prorratea por ingreso', () => {
+    expect(calc.factorProrrateo('2026-07-10', '2026-08-31', '2026-07-01', '2026-07-15')).toBe(0.4);
+  });
+});
+
 describe('calcularTotales', () => {
   const lineas = [
     { clase: 'INGRESO', monto: 1000, es_provision: false }, // sueldo

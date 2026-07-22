@@ -9,6 +9,7 @@ const ANCHOS_NOMINA = [
   { wch: 12 }, // Cédula
   { wch: 16 }, // Empresa
   { wch: 10 }, // Tipo
+  { wch: 20 }, // Clasificación
   { wch: 12 }, // Ingresos
   { wch: 12 }, // Descuentos
   { wch: 12 }, // Neto
@@ -35,6 +36,7 @@ export function generarExcelNomina(roles, lineas) {
     'Cédula': r.cedula ?? '',
     Empresa: r.empresa ?? '',
     Tipo: r.tipo,
+    'Clasificación': r.tipo === 'EXTERNO' ? 'SERV. PROFESIONALES' : (r.clasificacion ?? ''),
     Ingresos: Number(r.total_ingresos),
     Descuentos: Number(r.total_descuentos),
     Neto: Number(r.neto),

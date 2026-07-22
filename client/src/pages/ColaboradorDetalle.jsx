@@ -40,6 +40,7 @@ function FichaTab({ col, onGuardado, onError }) {
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
     departamento: col.departamento ?? '', cargo: col.cargo ?? '', fecha_ingreso: col.fecha_ingreso?.slice(0, 10) ?? '',
+    fecha_salida: col.fecha_salida?.slice(0, 10) ?? '',
     clasificacion: col.clasificacion ?? 'ADMINISTRATIVO',
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
@@ -61,6 +62,7 @@ function FichaTab({ col, onGuardado, onError }) {
       await api.patch(`/colaboradores/${col.id}`, {
         ...form,
         fecha_ingreso: form.fecha_ingreso || null,
+        fecha_salida: form.fecha_salida || null,
         cargas_personales: Number(form.cargas_personales) || 0,
         pct_anticipo: form.pct_anticipo === '' ? null : Number(form.pct_anticipo),
         fecha_nacimiento: form.fecha_nacimiento || null,
@@ -118,6 +120,7 @@ function FichaTab({ col, onGuardado, onError }) {
           </label>
           <label className="text-sm text-slate-600">Dirección de domicilio {campo('direccion')}</label>
           <label className="text-sm text-slate-600">Fecha de ingreso (IESS) {campo('fecha_ingreso', { type: 'date' })}</label>
+          <label className="text-sm text-slate-600">Fecha de salida (último día trabajado) {campo('fecha_salida', { type: 'date' })}</label>
           <label className="text-sm text-slate-600">Empresa
             <select className="input w-full" value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })}>
               <option value="">—</option>

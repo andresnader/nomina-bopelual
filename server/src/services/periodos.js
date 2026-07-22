@@ -48,7 +48,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
   const quincena = periodo.quincena;
   const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
   const factor = col.tipo === 'IESS'
-    ? calc.factorProrrateoIngreso(col.fecha_ingreso, periodo.fecha_inicio, periodo.fecha_fin)
+    ? calc.factorProrrateo(col.fecha_ingreso, col.fecha_salida, periodo.fecha_inicio, periodo.fecha_fin)
     : 1;
   const sufijoProrrateo = factor < 1 ? ` · prorrateado (${(factor * 100).toFixed(0)}% de la quincena)` : '';
   let agregadas = 0;
@@ -117,7 +117,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
 export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quincena, periodoFechaInicio, periodoFechaFin) {
   // Obtener datos del colaborador y su contrato vigente.
   const { rows } = await client.query(
-    `SELECT c.id, c.tipo, c.pct_anticipo, c.fecha_ingreso, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
+    `SELECT c.id, c.tipo, c.pct_anticipo, c.fecha_ingreso, c.fecha_salida, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
      FROM colaboradores c
      JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
      WHERE c.id=$1`,
@@ -242,10 +242,11 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
 
 // Genera el rol_pago de UN colaborador para un período dado, con las mismas
 // líneas automáticas que generarRoles. Si el colaborador es IESS y su fecha
-// de ingreso cae a mitad de este período, prorratea el sueldo/bono/rubros
-// según los días trabajados (convención de 15 días por quincena) — los
-// colaboradores EXTERNO nunca se prorratean. Reutilizable desde generarRoles
-// (período nuevo) y agregarColaboradorAPeriodosBorrador (colaborador nuevo).
+// de ingreso o de salida cae a mitad de este período, prorratea el
+// sueldo/bono/rubros según los días trabajados (convención de 15 días por
+// quincena) — los colaboradores EXTERNO nunca se prorratean. Reutilizable
+// desde generarRoles (período nuevo) y agregarColaboradorAPeriodosBorrador
+// (colaborador nuevo).
 async function generarRolColaborador(client, periodoId, periodo, col, pctAnticipoGlobal, sbu) {
   const { rows: rolRows } = await client.query(
     `INSERT INTO roles_pago (periodo_id, colaborador_id) VALUES ($1,$2) RETURNING id`,
@@ -262,6 +263,9 @@ async function generarRolColaborador(client, periodoId, periodo, col, pctAnticip
 }
 
 // Genera un rol_pago con líneas automáticas para cada colaborador activo con contrato vigente.
+// Se excluye a quien ya salió antes de que empiece el período (fecha_salida
+// anterior al inicio: trabajó 0 días de esta quincena); si la salida cae a
+// mitad del período, entra con prorrateo hasta ese día.
 // La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
 export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }) {
   // FOR UPDATE bloquea el período durante la generación (evita regeneración concurrente).
@@ -276,7 +280,9 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
     `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
      FROM colaboradores c
      JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
-     WHERE c.activo=true`
+     WHERE c.activo=true
+       AND (c.fecha_salida IS NULL OR c.fecha_salida >= $1)`,
+    [periodo.fecha_inicio]
   );
 
   let creados = 0;
@@ -317,6 +323,8 @@ export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId)
 
   let agregados = 0;
   for (const periodo of periodosBorrador) {
+    // Si ya salió antes de que empiece este período, no le corresponde rol.
+    if (col.fecha_salida && new Date(col.fecha_salida) < new Date(periodo.fecha_inicio)) continue;
     const { rows: existente } = await client.query(
       'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]
     );
