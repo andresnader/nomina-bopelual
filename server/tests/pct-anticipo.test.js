@@ -47,4 +47,35 @@ describe('pct_anticipo por colaborador', () => {
     expect(await anticipoDe(conOverride.id)).toBe(500); // 50% de 1000
     expect(await anticipoDe(sinOverride.id)).toBe(400); // global 40%
   });
+
+  it('sincronizar recalcula el anticipo si pct_anticipo cambia después de generado el rol', async () => {
+    const app = createApp();
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `pct tardio ${Date.now()}`, fecha_inicio: '2027-06-01', fecha_fin: '2027-06-15', quincena: 1
+    });
+    const periodoId = per.body.periodo.id;
+
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `PctTardio ${Date.now()}`, cedula: `PT${Date.now() % 1e8}`
+    })).body;
+    // Contrato primero (dispara la alta automática al período BORRADOR con el 40% global).
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2027-06-01'
+    });
+    const det = await auth(request(app).get(`/api/periodos/${periodoId}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+
+    const anticipoAntes = await auth(request(app).get(`/api/roles/${rol.id}`));
+    expect(Number(anticipoAntes.body.lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA').monto)).toBe(400);
+
+    // Ahora, después, RRHH configura el 50% individual.
+    await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ pct_anticipo: 0.5 });
+
+    const sync = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
+    expect(sync.status).toBe(200);
+    expect(sync.body.actualizadas).toBeGreaterThanOrEqual(1);
+
+    const anticipoDespues = await auth(request(app).get(`/api/roles/${rol.id}`));
+    expect(Number(anticipoDespues.body.lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA').monto)).toBe(500);
+  });
 });

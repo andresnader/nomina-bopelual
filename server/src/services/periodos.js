@@ -20,23 +20,111 @@ async function insertarLinea(client, rolId, { tipo, clase, monto, es_provision =
   );
 }
 
-// Restaura las líneas de sueldo base (ingresos y descuentos fijos) si fueron
-// eliminadas accidentalmente de un rol. Reconstituye exactamente lo que
-// generarRoles crea: anticipo/sueldo, IESS, décimos, fondos de reserva y rubros de ingreso.
-// Reutilizable desde sincronizarPeriodo y /roles/:id/sincronizar.
-export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quincena, periodoFechaFin) {
+// Inserta la línea si no existe (según el mapa `existentesPorTipo`), o la
+// actualiza si el monto/descripción calculados ya no coinciden con lo
+// guardado (p. ej. cambió el sueldo, el pct_anticipo o el prorrateo).
+async function insertarOActualizarLinea(client, rolId, existentesPorTipo, { tipo, clase, monto, desc = null }) {
+  const existente = existentesPorTipo.get(tipo);
+  if (!existente) {
+    await insertarLinea(client, rolId, { tipo, clase, monto, desc });
+    return 'agregada';
+  }
+  if (Number(existente.monto) !== monto || (existente.descripcion ?? null) !== desc) {
+    await client.query('UPDATE lineas_rol SET monto=$1, descripcion=$2 WHERE id=$3', [monto, desc, existente.id]);
+    return 'actualizada';
+  }
+  return null;
+}
+
+// Calcula e inserta/actualiza las líneas de sueldo/bono/IESS/décimos/fondos/
+// rubros de un colaborador para un rol_pago. Única fuente de verdad para
+// este cálculo: la usan tanto generarRolColaborador (rol nuevo, todo se
+// inserta porque existentesPorTipo llega vacío) como aplicarSueldoPendiente
+// (rol ya generado, se compara y actualiza lo que cambió) — antes cada una
+// tenía su propia copia de esta fórmula y podían desincronizarse entre sí.
+async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, sbu, existentesPorTipo) {
+  const sueldo = Number(col.sueldo_base);
+  const bono = Number(col.bono);
+  const quincena = periodo.quincena;
+  const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
+  const factor = col.tipo === 'IESS'
+    ? calc.factorProrrateoIngreso(col.fecha_ingreso, periodo.fecha_inicio, periodo.fecha_fin)
+    : 1;
+  const sufijoProrrateo = factor < 1 ? ` · prorrateado (${(factor * 100).toFixed(0)}% de la quincena)` : '';
+  let agregadas = 0;
+  let actualizadas = 0;
+  const aplicar = async (linea) => {
+    const r = await insertarOActualizarLinea(client, rolId, existentesPorTipo, linea);
+    if (r === 'agregada') agregadas++;
+    else if (r === 'actualizada') actualizadas++;
+  };
+
+  if (quincena === 1) {
+    await aplicar({
+      tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: round2(calc.anticipoQuincena(sueldo, pct) * factor),
+      desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
+    });
+    if (bono > 0) {
+      await aplicar({
+        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pct * factor),
+        desc: `Bono primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
+      });
+    }
+  } else {
+    const pctSegunda = round2(1 - pct);
+    await aplicar({
+      tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda * factor),
+      desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
+    });
+    if (bono > 0) {
+      await aplicar({
+        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pctSegunda * factor),
+        desc: `Bono segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
+      });
+    }
+    if (col.tipo === 'IESS') {
+      await aplicar({ tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo) });
+      await aplicar({ tipo: 'DECIMO_TERCERO', clase: 'INGRESO', monto: calc.decimoTercero(sueldo) });
+      await aplicar({ tipo: 'DECIMO_CUARTO', clase: 'INGRESO', monto: calc.decimoCuarto(sbu) });
+      await aplicar({ tipo: 'FONDOS_RESERVA', clase: 'INGRESO', monto: calc.fondosReserva(sueldo, 999), desc: 'Fondos de reserva' });
+    }
+  }
+
+  // ── Rubros de Ingreso Proyectados ──────────────────────────────────
+  const { rows: rubros } = await client.query(
+    `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
+    [col.id]
+  );
+  for (const rubro of rubros) {
+    const montoMensual = Number(rubro.valor_mensual);
+    if (montoMensual <= 0) continue;
+    const monto = quincena === 1 ? round2(montoMensual * pct * factor) : round2(montoMensual * (1 - pct) * factor);
+    if (monto > 0) {
+      await aplicar({
+        tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
+        desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})${sufijoProrrateo}`
+      });
+    }
+  }
+
+  return { agregadas, actualizadas };
+}
+
+// Restaura o refresca las líneas de sueldo/bono/IESS/décimos/fondos/rubros de
+// un rol ya generado: inserta las que falten y actualiza el monto de las que
+// ya tenía si cambió el sueldo, el pct_anticipo o el prorrateo desde que se
+// generó. Reutilizable desde sincronizarPeriodo y /roles/:id/sincronizar.
+export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quincena, periodoFechaInicio, periodoFechaFin) {
   // Obtener datos del colaborador y su contrato vigente.
   const { rows } = await client.query(
-    `SELECT c.tipo, c.pct_anticipo, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
+    `SELECT c.id, c.tipo, c.pct_anticipo, c.fecha_ingreso, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
      FROM colaboradores c
      JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
      WHERE c.id=$1`,
     [colaboradorId]
   );
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { agregadas: 0, actualizadas: 0 };
   const col = rows[0];
-  const sueldo = Number(col.sueldo_base);
-  const bono = Number(col.bono);
 
   // Obtener parámetros globales.
   const { rows: paramRows } = await client.query(
@@ -45,101 +133,20 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
   const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
   const sbu = Number(params.SBU ?? '460');
   const pctGlobal = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
-  const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctGlobal;
 
-  // Verificar qué líneas de sueldo ya existen en el rol.
+  // Líneas de sueldo que ya existen en el rol, con su id/monto/descripción
+  // para poder comparar y actualizar si el cálculo ya no coincide.
   const { rows: existentes } = await client.query(
-    `SELECT tipo_linea FROM lineas_rol WHERE rol_pago_id=$1
+    `SELECT id, tipo_linea, monto, descripcion FROM lineas_rol WHERE rol_pago_id=$1
      AND (tipo_linea IN ('ANTICIPO_QUINCENA','SUELDO_BASE','IESS_PERSONAL',
        'DECIMO_TERCERO','DECIMO_CUARTO','FONDOS_RESERVA','BONO')
        OR tipo_linea LIKE 'RUBRO_%')`,
     [rolId]
   );
-  const tipos = new Set(existentes.map((e) => e.tipo_linea));
-  let agregadas = 0;
+  const existentesPorTipo = new Map(existentes.map((e) => [e.tipo_linea, e]));
 
-  if (quincena === 1) {
-    if (!tipos.has('ANTICIPO_QUINCENA')) {
-      await insertarLinea(client, rolId, {
-        tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: calc.anticipoQuincena(sueldo, pct),
-        desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)`
-      });
-      agregadas++;
-    }
-    if (bono > 0 && !tipos.has('BONO')) {
-      await insertarLinea(client, rolId, {
-        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pct),
-        desc: `Bono primera quincena (${(pct * 100).toFixed(0)}%)`
-      });
-      agregadas++;
-    }
-  } else {
-    if (!tipos.has('SUELDO_BASE')) {
-      const pctSegunda = round2(1 - pct);
-      await insertarLinea(client, rolId, {
-        tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda),
-        desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`
-      });
-      agregadas++;
-    }
-    if (bono > 0 && !tipos.has('BONO')) {
-      const pctSegunda = round2(1 - pct);
-      await insertarLinea(client, rolId, {
-        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pctSegunda),
-        desc: `Bono segunda quincena (${(pctSegunda * 100).toFixed(0)}%)`
-      });
-      agregadas++;
-    }
-    if (col.tipo === 'IESS') {
-      if (!tipos.has('IESS_PERSONAL')) {
-        await insertarLinea(client, rolId, {
-          tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo)
-        });
-        agregadas++;
-      }
-      if (!tipos.has('DECIMO_TERCERO')) {
-        await insertarLinea(client, rolId, {
-          tipo: 'DECIMO_TERCERO', clase: 'INGRESO', monto: calc.decimoTercero(sueldo)
-        });
-        agregadas++;
-      }
-      if (!tipos.has('DECIMO_CUARTO')) {
-        await insertarLinea(client, rolId, {
-          tipo: 'DECIMO_CUARTO', clase: 'INGRESO', monto: calc.decimoCuarto(sbu)
-        });
-        agregadas++;
-      }
-      if (!tipos.has('FONDOS_RESERVA')) {
-        await insertarLinea(client, rolId, {
-          tipo: 'FONDOS_RESERVA', clase: 'INGRESO', monto: calc.fondosReserva(sueldo, 999),
-          desc: 'Fondos de reserva'
-        });
-        agregadas++;
-      }
-    }
-  }
-
-  // ── Rubros de Ingreso Proyectados ──────────────────────────────────
-  const { rows: rubros } = await client.query(
-    `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
-    [colaboradorId]
-  );
-  for (const rubro of rubros) {
-    const tipoRubro = `RUBRO_${rubro.tipo}`;
-    if (tipos.has(tipoRubro)) continue;
-    const montoMensual = Number(rubro.valor_mensual);
-    if (montoMensual <= 0) continue;
-    const monto = quincena === 1 ? round2(montoMensual * pct) : round2(montoMensual * (1 - pct));
-    if (monto > 0) {
-      await insertarLinea(client, rolId, {
-        tipo: tipoRubro, clase: 'INGRESO', monto,
-        desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})`
-      });
-      agregadas++;
-    }
-  }
-
-  return agregadas;
+  const periodo = { quincena, fecha_inicio: periodoFechaInicio, fecha_fin: periodoFechaFin };
+  return aplicarLineasSueldo(client, rolId, col, periodo, pctGlobal, sbu, existentesPorTipo);
 }
 
 // Aplica al rol las cuotas de préstamos activos que aún no tenga (por
@@ -245,78 +252,10 @@ async function generarRolColaborador(client, periodoId, periodo, col, pctAnticip
     [periodoId, col.id]
   );
   const rolId = rolRows[0].id;
-  const sueldo = Number(col.sueldo_base);
-  const bono = Number(col.bono);
-  const quincena = periodo.quincena;
-  // El % de anticipo del colaborador manda; sin él aplica el parámetro global.
-  const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
-  const factor = col.tipo === 'IESS'
-    ? calc.factorProrrateoIngreso(col.fecha_ingreso, periodo.fecha_inicio, periodo.fecha_fin)
-    : 1;
-  const sufijoProrrateo = factor < 1 ? ` · prorrateado (${(factor * 100).toFixed(0)}% de la quincena)` : '';
 
-  if (quincena === 1) {
-    await insertarLinea(client, rolId, {
-      tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: round2(calc.anticipoQuincena(sueldo, pct) * factor),
-      desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
-    });
-    if (bono > 0) {
-      await insertarLinea(client, rolId, {
-        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pct * factor),
-        desc: `Bono primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
-      });
-    }
-  } else {
-    const pctSegunda = round2(1 - pct);
-    await insertarLinea(client, rolId, {
-      tipo: 'SUELDO_BASE', clase: 'INGRESO', monto: round2(sueldo * pctSegunda * factor),
-      desc: `Pago segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
-    });
-    if (bono > 0) {
-      await insertarLinea(client, rolId, {
-        tipo: 'BONO', clase: 'INGRESO', monto: round2(bono * pctSegunda * factor),
-        desc: `Bono segunda quincena (${(pctSegunda * 100).toFixed(0)}%)${sufijoProrrateo}`
-      });
-    }
-    if (col.tipo === 'IESS') {
-      await insertarLinea(client, rolId, {
-        tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo)
-      });
-      await insertarLinea(client, rolId, {
-        tipo: 'DECIMO_TERCERO', clase: 'INGRESO',
-        monto: calc.decimoTercero(sueldo)
-      });
-      await insertarLinea(client, rolId, {
-        tipo: 'DECIMO_CUARTO', clase: 'INGRESO',
-        monto: calc.decimoCuarto(sbu)
-      });
-      await insertarLinea(client, rolId, {
-        tipo: 'FONDOS_RESERVA', clase: 'INGRESO',
-        monto: calc.fondosReserva(sueldo, 999),
-        desc: 'Fondos de reserva'
-      });
-    }
-  }
-
-  // ── Rubros de Ingreso Proyectados ──────────────────────────────────
-  const { rows: rubros } = await client.query(
-    `SELECT * FROM rubros_ingreso WHERE colaborador_id=$1 AND (activo IS NULL OR activo=true)`,
-    [col.id]
-  );
-  for (const rubro of rubros) {
-    const montoMensual = Number(rubro.valor_mensual);
-    if (montoMensual <= 0) continue;
-    const monto = quincena === 1 ? round2(montoMensual * pct * factor) : round2(montoMensual * (1 - pct) * factor);
-    if (monto > 0) {
-      await insertarLinea(client, rolId, {
-        tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
-        desc: `${rubro.tipo}${rubro.descripcion ? ': ' + rubro.descripcion : ''} (quincena ${quincena})${sufijoProrrateo}`
-      });
-    }
-  }
-
+  await aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, sbu, new Map());
   await aplicarPrestamosPendientes(client, rolId, col.id, periodo.fecha_fin);
-  await aplicarDescuentosPendientes(client, rolId, col.id, quincena, periodo.fecha_inicio);
+  await aplicarDescuentosPendientes(client, rolId, col.id, periodo.quincena, periodo.fecha_inicio);
 
   await recalcularTotales(client, rolId);
   return rolId;
@@ -405,7 +344,9 @@ export async function sincronizarPeriodo(client, periodoId) {
   let agregadas = 0;
   let actualizadas = 0;
   for (const rol of roles) {
-    agregadas += await aplicarSueldoPendiente(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_fin);
+    const sueldo = await aplicarSueldoPendiente(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_inicio, periodoRows[0].fecha_fin);
+    agregadas += sueldo.agregadas;
+    actualizadas += sueldo.actualizadas;
     agregadas += await aplicarPrestamosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].fecha_fin);
     const descuentos = await aplicarDescuentosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_inicio);
     agregadas += descuentos.agregadas;
