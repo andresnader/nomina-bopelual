@@ -8,7 +8,6 @@ import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
-import { RUBROS_TIPO } from './ColaboradorDetalle.jsx';
 
 const NUEVA = { tipo_linea: '', clase: 'INGRESO', monto: '', descripcion: '' };
 
@@ -134,8 +133,7 @@ export default function RolPago() {
                 onChange={(e) => setNueva({ ...nueva, tipo_linea: e.target.value })}
                 className="input w-full">
                 <option value="">Tipo…</option>
-                {(nueva.clase === 'INGRESO' ? RUBROS_TIPO : tiposDescuento.map((t) => ({ value: t.tipo, label: t.label })))
-                  .map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {tiposDescuento.map((t) => <option key={t.tipo} value={t.tipo}>{t.label}</option>)}
               </select>
               <select value={nueva.clase}
                 onChange={(e) => setNueva({ ...nueva, clase: e.target.value, tipo_linea: '' })}

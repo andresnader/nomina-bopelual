@@ -554,7 +554,7 @@ function ContratosTab({ col, onCambio, onError }) {
   );
 }
 
-export const RUBROS_TIPO = [
+const RUBROS_TIPO = [
   { value: 'SUELDO', label: 'Sueldo' },
   { value: 'ALIMENTACION', label: 'Alimentación' },
   { value: 'TRANSPORTE', label: 'Transporte' },
