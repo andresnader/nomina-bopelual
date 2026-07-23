@@ -6,6 +6,7 @@ import { generarTxtPichincha } from '../lib/txt-pichincha.js';
 import { generarExcelNomina } from '../lib/excel-nomina.js';
 import { round2 } from '../lib/round.js';
 import { grupoDeColaborador, SQL_GRUPO } from '../lib/grupos.js';
+import { gruposDePeriodo, aprobarGrupo, reabrirGrupo } from '../services/aprobaciones.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -57,7 +58,8 @@ router.get('/:id', requireRole(['ADMIN', 'RRHH', 'GERENCIA']), async (req, res) 
      WHERE rp.periodo_id=$1 ORDER BY c.nombre`,
     [req.params.id]
   );
-  res.json({ ...p[0], roles_pago: roles });
+  const grupos = await gruposDePeriodo(pool, req.params.id);
+  res.json({ ...p[0], roles_pago: roles, grupos });
 });
 
 function accionHandler(accion) {
@@ -79,6 +81,38 @@ function accionHandler(accion) {
 }
 router.post('/:id/aprobar', requireRole(['ADMIN', 'RRHH']), accionHandler('aprobar'));
 router.post('/:id/cerrar', requireRole(['ADMIN', 'RRHH']), accionHandler('cerrar'));
+
+const GRUPOS_VALIDOS = ['COMERCIAL', 'ADM', 'SERV_PROF'];
+
+function accionGrupo(fn) {
+  return async (req, res) => {
+    const { empresa, grupo } = req.body;
+    if (!empresa || !GRUPOS_VALIDOS.includes(grupo)) {
+      return res.status(400).json({ error: 'empresa y grupo válido requeridos' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Solo se aprueba/reabre mientras el período está en BORRADOR.
+      const { rows } = await client.query('SELECT estado FROM periodos WHERE id=$1 FOR UPDATE', [req.params.id]);
+      if (rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'no encontrado' }); }
+      if (rows[0].estado !== 'BORRADOR') { await client.query('ROLLBACK'); return res.status(409).json({ error: `período ${rows[0].estado}: no editable` }); }
+      await fn(client, req.params.id, empresa, grupo, req.usuario.id);
+      await client.query('COMMIT');
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  };
+}
+
+router.post('/:id/grupos/aprobar', requireRole(['ADMIN', 'RRHH']),
+  accionGrupo((client, id, empresa, grupo, usuarioId) => aprobarGrupo(client, id, empresa, grupo, usuarioId)));
+router.post('/:id/grupos/reabrir', requireRole(['ADMIN', 'RRHH']),
+  accionGrupo((client, id, empresa, grupo) => reabrirGrupo(client, id, empresa, grupo)));
 
 // Marca/desmarca si un rol se paga por el TXT masivo del banco. El Excel de
 // la nómina no se ve afectado: siempre incluye a todos. No se restringe por
