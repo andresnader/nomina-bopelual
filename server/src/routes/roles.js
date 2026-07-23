@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
-import { puedeEditarLineas } from '../lib/periodo-fsm.js';
+import { grupoDeColaborador } from '../lib/grupos.js';
 import { recalcularTotales } from '../services/roles.js';
 import { aplicarPrestamosPendientes, aplicarDescuentosPendientes, aplicarSueldoPendiente } from '../services/periodos.js';
 
@@ -33,18 +33,30 @@ router.get(
   }
 );
 
-async function estadoPeriodoDelRol(rolId) {
+// Un rol es editable si su período está en BORRADOR y su grupo (empresa × grupo)
+// no ha sido aprobado todavía.
+async function puedeEditarRol(rolId) {
   const { rows } = await pool.query(
-    `SELECT p.estado FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id WHERE rp.id=$1`,
+    `SELECT p.id AS periodo_id, p.estado, c.empresa, c.tipo, c.clasificacion
+     FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
+     JOIN colaboradores c ON c.id=rp.colaborador_id WHERE rp.id=$1`,
     [rolId]
   );
-  return rows[0]?.estado;
+  if (rows.length === 0) return { ok: false, code: 404, error: 'rol no encontrado' };
+  const r = rows[0];
+  if (r.estado !== 'BORRADOR') return { ok: false, code: 409, error: `período ${r.estado}: no editable` };
+  const grupo = grupoDeColaborador(r.tipo, r.clasificacion);
+  const { rows: ag } = await pool.query(
+    `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
+    [r.periodo_id, r.empresa, grupo]
+  );
+  if (ag.length > 0) return { ok: false, code: 409, error: 'grupo aprobado: no editable' };
+  return { ok: true };
 }
 
 router.post('/:id/lineas', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const estado = await estadoPeriodoDelRol(req.params.id);
-  if (!estado) return res.status(404).json({ error: 'rol no encontrado' });
-  if (!puedeEditarLineas(estado)) return res.status(409).json({ error: `período ${estado}: no editable` });
+  const guard = await puedeEditarRol(req.params.id);
+  if (!guard.ok) return res.status(guard.code).json({ error: guard.error });
   const { tipo_linea, clase, monto, descripcion, es_provision } = req.body;
   if (!tipo_linea || !clase || monto == null) return res.status(400).json({ error: 'campos requeridos' });
   const client = await pool.connect();
@@ -67,8 +79,8 @@ router.post('/:id/lineas', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 });
 
 router.delete('/:rolId/lineas/:lineaId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const estado = await estadoPeriodoDelRol(req.params.rolId);
-  if (!puedeEditarLineas(estado)) return res.status(409).json({ error: `período ${estado}: no editable` });
+  const guard = await puedeEditarRol(req.params.rolId);
+  if (!guard.ok) return res.status(guard.code).json({ error: guard.error });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -103,6 +115,8 @@ router.delete('/:rolId/lineas/:lineaId', requireRole(['ADMIN', 'RRHH']), async (
 // haber generado el período, sin duplicar los que ya tenga. Solo mientras
 // el período esté en BORRADOR (mismo criterio que editar líneas a mano).
 router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const guard = await puedeEditarRol(req.params.id);
+  if (!guard.ok) return res.status(guard.code).json({ error: guard.error });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -114,10 +128,6 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
     if (rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'rol no encontrado' });
-    }
-    if (!puedeEditarLineas(rows[0].estado)) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: `período ${rows[0].estado}: no editable` });
     }
     const sueldo = await aplicarSueldoPendiente(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_inicio, rows[0].fecha_fin);
     const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
