@@ -5,6 +5,7 @@ import { crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo } f
 import { generarTxtPichincha } from '../lib/txt-pichincha.js';
 import { generarExcelNomina } from '../lib/excel-nomina.js';
 import { round2 } from '../lib/round.js';
+import { grupoDeColaborador, SQL_GRUPO } from '../lib/grupos.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -113,11 +114,8 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
   }
 });
 
-// Archivo de pago masivo Cash Management (Banco Pichincha) del período.
-// Filtros: ?empresa=BOPELUAL S.A.&grupo=ADM|COMERCIAL|SERV_PROF
-// Los grupos replican los TXT del proceso manual: SERV_PROF = externos,
-// COMERCIAL/ADM = IESS según el campo explícito clasificacion del colaborador
-// (antes se adivinaba comparando el texto libre de Departamento).
+// Grupos del archivo de pago: SERV_PROF = externos; COMERCIAL/ADM = IESS según
+// la clasificación explícita del colaborador. Regla única en lib/grupos.js.
 const FILTRO_GRUPO = {
   SERV_PROF: `c.tipo='EXTERNO'`,
   COMERCIAL: `c.tipo='IESS' AND c.clasificacion='COMERCIAL'`,
