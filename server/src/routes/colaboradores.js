@@ -197,6 +197,53 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   }
 });
 
+// ── Vínculos de empresa (historial de entradas/salidas) ────────────────────
+router.get('/:id/empleo-periodos', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const vinculos = await listarVinculos(pool, req.params.id);
+  res.json(vinculos);
+});
+
+// Aplica un cambio de vínculos y luego sincroniza las fechas derivadas y
+// reconcilia los períodos en borrador, todo en la misma transacción.
+async function conVinculos(req, res, mut) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resultado = await mut(client);
+    await sincronizarFechasDerivadas(client, req.params.id);
+    await reconciliarColaboradorEnPeriodosBorrador(client, req.params.id);
+    await client.query('COMMIT');
+    return resultado;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+router.post('/:id/empleo-periodos', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { fecha_entrada, fecha_salida } = req.body;
+  if (!fecha_entrada) return res.status(400).json({ error: 'fecha_entrada requerida' });
+  const creado = await conVinculos(req, res, (client) =>
+    crearVinculo(client, req.params.id, { fecha_entrada, fecha_salida }));
+  if (creado) res.status(201).json(creado);
+});
+
+router.patch('/:id/empleo-periodos/:vinculoId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { fecha_entrada, fecha_salida } = req.body;
+  if (!fecha_entrada) return res.status(400).json({ error: 'fecha_entrada requerida' });
+  const ok = await conVinculos(req, res, (client) =>
+    editarVinculo(client, req.params.vinculoId, { fecha_entrada, fecha_salida }));
+  if (ok !== null) res.json({ ok: true });
+});
+
+router.delete('/:id/empleo-periodos/:vinculoId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const ok = await conVinculos(req, res, (client) => borrarVinculo(client, req.params.vinculoId));
+  if (ok !== null) res.json({ ok: true });
+});
+
 // Nuevo contrato: cierra el contrato activo previo y crea el nuevo (historial de sueldos).
 router.post('/:id/contratos', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   const { sueldo_base, fecha_inicio, notas, tipo_contrato, bono } = req.body;

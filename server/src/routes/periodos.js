@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole } from '../auth/middleware.js';
-import { crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo } from '../services/periodos.js';
+import { crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo, eliminarRol } from '../services/periodos.js';
 import { generarTxtPichincha } from '../lib/txt-pichincha.js';
 import { generarExcelNomina } from '../lib/excel-nomina.js';
 import { round2 } from '../lib/round.js';
@@ -113,6 +113,37 @@ router.post('/:id/grupos/aprobar', requireRole(['ADMIN', 'RRHH']),
   accionGrupo((client, id, empresa, grupo, usuarioId) => aprobarGrupo(client, id, empresa, grupo, usuarioId)));
 router.post('/:id/grupos/reabrir', requireRole(['ADMIN', 'RRHH']),
   accionGrupo((client, id, empresa, grupo) => reabrirGrupo(client, id, empresa, grupo)));
+
+// Quita un rol de un período en BORRADOR (respaldo manual del quitado
+// automático por salida). Revierte préstamos/descuentos vía eliminarRol.
+router.delete('/:id/roles/:rolId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT p.estado, c.empresa, c.tipo, c.clasificacion
+       FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
+       JOIN colaboradores c ON c.id=rp.colaborador_id
+       WHERE rp.id=$1 AND rp.periodo_id=$2 FOR UPDATE`,
+      [req.params.rolId, req.params.id]
+    );
+    if (rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'rol no encontrado en este período' }); }
+    if (rows[0].estado !== 'BORRADOR') { await client.query('ROLLBACK'); return res.status(409).json({ error: `período ${rows[0].estado}: no editable` }); }
+    const grupo = grupoDeColaborador(rows[0].tipo, rows[0].clasificacion);
+    const { rows: ag } = await client.query(
+      `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
+      [req.params.id, rows[0].empresa, grupo]);
+    if (ag.length > 0) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'grupo aprobado: no editable' }); }
+    await eliminarRol(client, req.params.rolId);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 // Marca/desmarca si un rol se paga por el TXT masivo del banco. El Excel de
 // la nómina no se ve afectado: siempre incluye a todos. No se restringe por
