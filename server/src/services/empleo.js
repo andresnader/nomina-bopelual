@@ -16,11 +16,19 @@ export async function crearVinculo(client, colaboradorId, { fecha_entrada, fecha
   return rows[0];
 }
 
-export async function editarVinculo(client, vinculoId, { fecha_entrada, fecha_salida }) {
+// Actualización parcial: solo toca los campos presentes en `campos`
+// (fecha_entrada y/o fecha_salida), para poder guardar un campo sin pisar el
+// otro (evita una carrera al editar entrada y salida seguidas).
+export async function editarVinculo(client, vinculoId, campos) {
+  const set = [], params = [];
+  for (const c of ['fecha_entrada', 'fecha_salida']) {
+    if (c in campos) { params.push(campos[c] ?? null); set.push(`${c}=$${params.length}`); }
+  }
+  if (set.length === 0) return;
+  params.push(vinculoId);
   await client.query(
-    `UPDATE empleo_periodos SET fecha_entrada=$1, fecha_salida=$2, actualizado_en=now()
-     WHERE id=$3`,
-    [fecha_entrada, fecha_salida ?? null, vinculoId]
+    `UPDATE empleo_periodos SET ${set.join(', ')}, actualizado_en=now() WHERE id=$${params.length}`,
+    params
   );
 }
 

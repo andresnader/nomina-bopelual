@@ -232,10 +232,11 @@ router.post('/:id/empleo-periodos', requireRole(['ADMIN', 'RRHH']), async (req, 
 });
 
 router.patch('/:id/empleo-periodos/:vinculoId', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { fecha_entrada, fecha_salida } = req.body;
-  if (!fecha_entrada) return res.status(400).json({ error: 'fecha_entrada requerida' });
-  const ok = await conVinculos(req, res, (client) =>
-    editarVinculo(client, req.params.vinculoId, { fecha_entrada, fecha_salida }));
+  const campos = {};
+  if ('fecha_entrada' in req.body) campos.fecha_entrada = req.body.fecha_entrada;
+  if ('fecha_salida' in req.body) campos.fecha_salida = req.body.fecha_salida;
+  if (Object.keys(campos).length === 0) return res.status(400).json({ error: 'nada que actualizar' });
+  const ok = await conVinculos(req, res, (client) => editarVinculo(client, req.params.vinculoId, campos));
   if (ok !== null) res.json({ ok: true });
 });
 

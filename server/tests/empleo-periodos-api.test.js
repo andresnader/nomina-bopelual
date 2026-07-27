@@ -49,4 +49,32 @@ describe('API empleo-periodos', () => {
       .send({ fecha_entrada: '2027-05-01', fecha_salida: '2027-04-01' });
     expect(bad.status).toBe(400);
   });
+
+  it('PATCH persiste las fechas y actualiza las columnas derivadas', async () => {
+    const app = createApp();
+    const s = Date.now();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `EPp ${s}`, cedula: `G${s % 1e8}`, fecha_ingreso: '2027-01-01'
+    })).body;
+    const lista = await auth(request(app).get(`/api/colaboradores/${col.id}/empleo-periodos`));
+    const vinc = lista.body[0];
+
+    await auth(request(app).patch(`/api/colaboradores/${col.id}/empleo-periodos/${vinc.id}`))
+      .send({ fecha_entrada: '2027-02-15', fecha_salida: '2027-09-30' });
+
+    const tras = await auth(request(app).get(`/api/colaboradores/${col.id}/empleo-periodos`));
+    expect(tras.body[0].fecha_entrada.slice(0, 10)).toBe('2027-02-15');
+    expect(tras.body[0].fecha_salida.slice(0, 10)).toBe('2027-09-30');
+
+    const det = await auth(request(app).get(`/api/colaboradores/${col.id}`));
+    expect(det.body.fecha_ingreso.slice(0, 10)).toBe('2027-02-15');
+    expect(det.body.fecha_salida.slice(0, 10)).toBe('2027-09-30');
+
+    // actualización parcial: cambiar solo la salida no pisa la entrada
+    await auth(request(app).patch(`/api/colaboradores/${col.id}/empleo-periodos/${vinc.id}`))
+      .send({ fecha_salida: '2027-11-30' });
+    const parcial = await auth(request(app).get(`/api/colaboradores/${col.id}/empleo-periodos`));
+    expect(parcial.body[0].fecha_entrada.slice(0, 10)).toBe('2027-02-15');
+    expect(parcial.body[0].fecha_salida.slice(0, 10)).toBe('2027-11-30');
+  });
 });

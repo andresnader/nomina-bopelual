@@ -238,11 +238,7 @@ function VinculosEmpresaModal({ colaboradorId, onClose, onGuardado }) {
   const guardarFila = async (v, campos) => {
     setError(null);
     try {
-      await api.patch(`/colaboradores/${colaboradorId}/empleo-periodos/${v.id}`, {
-        fecha_entrada: v.fecha_entrada?.slice(0, 10),
-        fecha_salida: v.fecha_salida?.slice(0, 10) || null,
-        ...campos,
-      });
+      await api.patch(`/colaboradores/${colaboradorId}/empleo-periodos/${v.id}`, campos);
       cargar();
     } catch (e) { setError(e.message); }
   };
@@ -269,11 +265,11 @@ function VinculosEmpresaModal({ colaboradorId, onClose, onGuardado }) {
             <tr key={v.id} className="border-b border-slate-200">
               <td className="p-2">
                 <input type="date" className="input" defaultValue={v.fecha_entrada?.slice(0, 10)}
-                  onBlur={(e) => guardarFila(v, { fecha_entrada: e.target.value })} />
+                  onChange={(e) => e.target.value && guardarFila(v, { fecha_entrada: e.target.value })} />
               </td>
               <td className="p-2">
                 <input type="date" className="input" defaultValue={v.fecha_salida?.slice(0, 10) || ''}
-                  onBlur={(e) => guardarFila(v, { fecha_salida: e.target.value || null })} />
+                  onChange={(e) => guardarFila(v, { fecha_salida: e.target.value || null })} />
               </td>
               <td className="p-2 text-right">
                 <button type="button" onClick={() => borrar(v)} className="text-slate-400 hover:text-red-600" title="Eliminar">🗑</button>
