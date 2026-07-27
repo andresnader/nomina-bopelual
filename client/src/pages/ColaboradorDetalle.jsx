@@ -223,6 +223,7 @@ function FichaTab({ col, onGuardado, onError }) {
 function VinculosEmpresaModal({ colaboradorId, onClose, onGuardado }) {
   const [vinculos, setVinculos] = useState([]);
   const [error, setError] = useState(null);
+  const toast = useToast();
 
   const cargar = () => api.get(`/colaboradores/${colaboradorId}/empleo-periodos`).then(setVinculos).catch((e) => setError(e.message));
   useEffect(() => { cargar(); }, [colaboradorId]);
@@ -237,9 +238,17 @@ function VinculosEmpresaModal({ colaboradorId, onClose, onGuardado }) {
   };
   const guardarFila = async (v, campos) => {
     setError(null);
+    // Validación instantánea: la salida no puede ser anterior a la entrada.
+    const entrada = campos.fecha_entrada ?? v.fecha_entrada?.slice(0, 10);
+    const salida = 'fecha_salida' in campos ? campos.fecha_salida : (v.fecha_salida?.slice(0, 10) || null);
+    if (entrada && salida && salida < entrada) {
+      setError('La fecha de salida no puede ser anterior a la de entrada. Ajustá primero la fecha de entrada.');
+      return;
+    }
     try {
       await api.patch(`/colaboradores/${colaboradorId}/empleo-periodos/${v.id}`, campos);
-      cargar();
+      await cargar();
+      toast.success('Fecha guardada.');
     } catch (e) { setError(e.message); }
   };
   const borrar = async (v) => {

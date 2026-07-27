@@ -216,7 +216,10 @@ async function conVinculos(req, res, mut) {
     return resultado;
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(400).json({ error: e.message });
+    const msg = e.constraint === 'empleo_periodos_check'
+      ? 'La fecha de salida no puede ser anterior a la fecha de entrada.'
+      : e.message;
+    res.status(400).json({ error: msg });
     return null;
   } finally {
     client.release();

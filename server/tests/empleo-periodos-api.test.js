@@ -48,6 +48,7 @@ describe('API empleo-periodos', () => {
     const bad = await auth(request(app).post(`/api/colaboradores/${col.id}/empleo-periodos`))
       .send({ fecha_entrada: '2027-05-01', fecha_salida: '2027-04-01' });
     expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/no puede ser anterior/);
   });
 
   it('PATCH persiste las fechas y actualiza las columnas derivadas', async () => {
