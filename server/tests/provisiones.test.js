@@ -12,6 +12,10 @@ describe('acumulación de provisiones', () => {
         `INSERT INTO colaboradores (tipo, nombre) VALUES ('IESS','P') RETURNING id`
       );
       await client.query(
+        `INSERT INTO empleo_periodos (colaborador_id, fecha_entrada) VALUES ($1,'2026-01-01')`,
+        [c[0].id]
+      );
+      await client.query(
         `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio) VALUES ($1,1200,'2026-01-01')`,
         [c[0].id]
       );

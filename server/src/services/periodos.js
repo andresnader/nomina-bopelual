@@ -3,7 +3,8 @@ import * as calc from '../lib/calculo.js';
 import { round2 } from '../lib/round.js';
 import { recalcularTotales } from './roles.js';
 import { aprobarTodosLosGrupos } from './aprobaciones.js';
-import { SQL_GRUPO } from '../lib/grupos.js';
+import { SQL_GRUPO, grupoDeColaborador } from '../lib/grupos.js';
+import { vinculoQueCubre } from './empleo.js';
 
 export async function crearPeriodo(client, p) {
   const { rows } = await client.query(
@@ -50,7 +51,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
   const quincena = periodo.quincena;
   const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
   const factor = col.tipo === 'IESS'
-    ? calc.factorProrrateo(col.fecha_ingreso, col.fecha_salida, periodo.fecha_inicio, periodo.fecha_fin)
+    ? calc.factorProrrateo(col.vinc_entrada, col.vinc_salida, periodo.fecha_inicio, periodo.fecha_fin)
     : 1;
   const sufijoProrrateo = factor < 1 ? ` · prorrateado (${(factor * 100).toFixed(0)}% de la quincena)` : '';
   let agregadas = 0;
@@ -127,6 +128,11 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
   );
   if (rows.length === 0) return { agregadas: 0, actualizadas: 0 };
   const col = rows[0];
+  // El prorrateo usa el vínculo de empresa que cubre este período (no las
+  // columnas derivadas, que reflejan el vínculo más reciente).
+  const vinc = await vinculoQueCubre(client, colaboradorId, periodoFechaInicio, periodoFechaFin);
+  col.vinc_entrada = vinc?.fecha_entrada ?? col.fecha_ingreso;
+  col.vinc_salida = vinc?.fecha_salida ?? null;
 
   // Obtener parámetros globales.
   const { rows: paramRows } = await client.query(
@@ -310,13 +316,21 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
     throw new Error(`no se generan roles en estado ${periodoRows[0].estado}`);
   }
   const periodo = periodoRows[0];
+  // Solo entran colaboradores con un vínculo de empresa que cubra el período
+  // (JOIN LATERAL, no LEFT JOIN: excluye a quien salió antes o no ha entrado).
   const { rows: colaboradores } = await client.query(
-    `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
+    `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono,
+            v.fecha_entrada AS vinc_entrada, v.fecha_salida AS vinc_salida
      FROM colaboradores c
      JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
-     WHERE c.activo=true
-       AND (c.fecha_salida IS NULL OR c.fecha_salida >= $1)`,
-    [periodo.fecha_inicio]
+     JOIN LATERAL (
+       SELECT fecha_entrada, fecha_salida FROM empleo_periodos ep
+       WHERE ep.colaborador_id=c.id AND ep.fecha_entrada <= $2
+         AND (ep.fecha_salida IS NULL OR ep.fecha_salida >= $1)
+       ORDER BY ep.fecha_entrada DESC LIMIT 1
+     ) v ON true
+     WHERE c.activo=true`,
+    [periodo.fecha_inicio, periodo.fecha_fin]
   );
 
   let creados = 0;
@@ -357,16 +371,68 @@ export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId)
 
   let agregados = 0;
   for (const periodo of periodosBorrador) {
-    // Si ya salió antes de que empiece este período, no le corresponde rol.
-    if (col.fecha_salida && new Date(col.fecha_salida) < new Date(periodo.fecha_inicio)) continue;
+    // Solo si tiene un vínculo de empresa que cubra este período.
+    const vinc = await vinculoQueCubre(client, colaboradorId, periodo.fecha_inicio, periodo.fecha_fin);
+    if (!vinc) continue;
     const { rows: existente } = await client.query(
       'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]
     );
     if (existente.length > 0) continue;
-    await generarRolColaborador(client, periodo.id, periodo, col, pctAnticipo, sbu);
+    const colConVinc = { ...col, vinc_entrada: vinc.fecha_entrada, vinc_salida: vinc.fecha_salida };
+    await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, sbu);
     agregados++;
   }
   return { agregados };
+}
+
+// Deja los períodos en BORRADOR consistentes con los vínculos actuales del
+// colaborador: quita su rol donde ya no tiene vínculo que cubra, y lo crea/
+// re-prorratea donde sí. No toca períodos no-BORRADOR ni grupos ya aprobados.
+export async function reconciliarColaboradorEnPeriodosBorrador(client, colaboradorId) {
+  const { rows: col } = await client.query(
+    `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono,0) AS bono
+     FROM colaboradores c
+     LEFT JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
+     WHERE c.id=$1`,
+    [colaboradorId]
+  );
+  if (col.length === 0) return;
+  const c = col[0];
+  const grupo = grupoDeColaborador(c.tipo, c.clasificacion);
+
+  const { rows: paramRows } = await client.query(
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO')`);
+  const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
+  const sbu = Number(params.SBU ?? '460');
+  const pctAnticipo = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+
+  const { rows: periodos } = await client.query(
+    `SELECT * FROM periodos WHERE estado='BORRADOR' ORDER BY fecha_inicio FOR UPDATE`);
+
+  for (const periodo of periodos) {
+    // No se toca un grupo ya aprobado (bloqueado) en este período.
+    const { rows: ag } = await client.query(
+      `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
+      [periodo.id, c.empresa, grupo]);
+    if (ag.length > 0) continue;
+
+    const vinc = await vinculoQueCubre(client, colaboradorId, periodo.fecha_inicio, periodo.fecha_fin);
+    const { rows: rolExistente } = await client.query(
+      'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]);
+
+    if (!vinc) {
+      if (rolExistente.length > 0) await eliminarRol(client, rolExistente[0].id);
+      continue;
+    }
+    if (c.sueldo_base == null) continue; // sin contrato vigente no hay rol que generar
+    if (rolExistente.length === 0) {
+      const colConVinc = { ...c, vinc_entrada: vinc.fecha_entrada, vinc_salida: vinc.fecha_salida };
+      await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, sbu);
+    } else {
+      await aplicarSueldoPendiente(client, rolExistente[0].id, colaboradorId, periodo.quincena, periodo.fecha_inicio, periodo.fecha_fin);
+      await recalcularTotales(client, rolExistente[0].id);
+    }
+  }
 }
 
 // Sincroniza TODOS los roles de un período de una sola vez: agrega préstamos/

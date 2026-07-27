@@ -2,7 +2,8 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
 import { esTipoContratoValido } from '../lib/tipos-contrato.js';
-import { agregarColaboradorAPeriodosBorrador } from '../services/periodos.js';
+import { agregarColaboradorAPeriodosBorrador, reconciliarColaboradorEnPeriodosBorrador } from '../services/periodos.js';
+import { crearVinculo, listarVinculos, editarVinculo, borrarVinculo, sincronizarFechasDerivadas } from '../services/empleo.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -61,12 +62,27 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   if (clasificacion && !['COMERCIAL', 'ADMINISTRATIVO'].includes(clasificacion)) {
     return res.status(400).json({ error: `clasificacion inválida: ${clasificacion}` });
   }
-  const { rows } = await pool.query(
-    `INSERT INTO colaboradores (tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, fecha_salida, clasificacion)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,'ADMINISTRATIVO')) RETURNING *`,
-    [tipo, cedula, nombre.toUpperCase(), email, departamento, cargo, fecha_ingreso, fecha_salida, clasificacion || null]
-  );
-  res.status(201).json(rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO colaboradores (tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, fecha_salida, clasificacion)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9,'ADMINISTRATIVO')) RETURNING *`,
+      [tipo, cedula, nombre.toUpperCase(), email, departamento, cargo, fecha_ingreso ?? null, fecha_salida ?? null, clasificacion || null]
+    );
+    // Vínculo de empresa inicial (fuente de verdad de las fechas de la nómina).
+    await crearVinculo(client, rows[0].id, {
+      fecha_entrada: fecha_ingreso ?? new Date().toISOString().slice(0, 10),
+      fecha_salida: fecha_salida ?? null,
+    });
+    await client.query('COMMIT');
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 router.get(
@@ -115,34 +131,69 @@ router.get(
   }
 );
 
+// Traduce un cambio de fecha_ingreso/fecha_salida (API legada de la ficha) a los
+// vínculos de empresa: ingreso => entrada del vínculo más antiguo; salida =>
+// salida del más reciente. El historial completo se edita por /empleo-periodos.
+async function aplicarFechasEmpleo(client, colId, body) {
+  const vinculos = await listarVinculos(client, colId); // orden por fecha_entrada asc
+  if (vinculos.length === 0) {
+    await crearVinculo(client, colId, {
+      fecha_entrada: body.fecha_ingreso ?? new Date().toISOString().slice(0, 10),
+      fecha_salida: 'fecha_salida' in body ? body.fecha_salida : null,
+    });
+    return;
+  }
+  if ('fecha_ingreso' in body && body.fecha_ingreso) {
+    const primero = vinculos[0];
+    await editarVinculo(client, primero.id, { fecha_entrada: body.fecha_ingreso, fecha_salida: primero.fecha_salida });
+  }
+  if ('fecha_salida' in body) {
+    const ultimo = vinculos[vinculos.length - 1];
+    await editarVinculo(client, ultimo.id, { fecha_entrada: ultimo.fecha_entrada, fecha_salida: body.fecha_salida });
+  }
+}
+
 router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  // fecha_ingreso/fecha_salida NO se escriben directo: son columnas derivadas
+  // que gobiernan los vínculos de empresa (se sincronizan aparte).
   const campos = [
-    'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'fecha_ingreso', 'fecha_salida',
+    'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago', 'clasificacion',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
     'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal'
   ];
   if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
-  const set = [];
-  const params = [];
+  const tocaFechas = ['fecha_ingreso', 'fecha_salida'].some((c) => c in req.body);
+  const set = [], params = [];
   for (const c of campos) {
-    if (c in req.body) {
-      params.push(req.body[c]);
-      set.push(`${c}=$${params.length}`);
-    }
+    if (c in req.body) { params.push(req.body[c]); set.push(`${c}=$${params.length}`); }
   }
-  if (set.length === 0) return res.status(400).json({ error: 'nada que actualizar' });
-  params.push(req.params.id);
+  if (!tocaFechas && set.length === 0) return res.status(400).json({ error: 'nada que actualizar' });
+
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `UPDATE colaboradores SET ${set.join(', ')} WHERE id=$${params.length} RETURNING *`,
-      params
-    );
+    await client.query('BEGIN');
+    if (tocaFechas) await aplicarFechasEmpleo(client, req.params.id, req.body);
+    if (set.length > 0) {
+      params.push(req.params.id);
+      const upd = await client.query(
+        `UPDATE colaboradores SET ${set.join(', ')} WHERE id=$${params.length} RETURNING id`, params);
+      if (upd.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'no encontrado' }); }
+    }
+    if (tocaFechas) {
+      await sincronizarFechasDerivadas(client, req.params.id);
+      await reconciliarColaboradorEnPeriodosBorrador(client, req.params.id);
+    }
+    const { rows } = await client.query('SELECT * FROM colaboradores WHERE id=$1', [req.params.id]);
+    await client.query('COMMIT');
     if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
     res.json(rows[0]);
   } catch (e) {
+    await client.query('ROLLBACK');
     res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 
