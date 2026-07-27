@@ -2,6 +2,8 @@ import { siguienteEstado } from '../lib/periodo-fsm.js';
 import * as calc from '../lib/calculo.js';
 import { round2 } from '../lib/round.js';
 import { recalcularTotales } from './roles.js';
+import { aprobarTodosLosGrupos } from './aprobaciones.js';
+import { SQL_GRUPO } from '../lib/grupos.js';
 
 export async function crearPeriodo(client, p) {
   const { rows } = await client.query(
@@ -345,8 +347,17 @@ export async function sincronizarPeriodo(client, periodoId) {
   if (periodoRows[0].estado !== 'BORRADOR') {
     throw new Error(`período ${periodoRows[0].estado}: no editable`);
   }
+  // Omite los roles de grupos ya aprobados (bloqueados): no se re-sincronizan.
   const { rows: roles } = await client.query(
-    'SELECT id, colaborador_id FROM roles_pago WHERE periodo_id=$1', [periodoId]
+    `SELECT rp.id, rp.colaborador_id
+     FROM roles_pago rp JOIN colaboradores c ON c.id = rp.colaborador_id
+     WHERE rp.periodo_id=$1
+       AND NOT EXISTS (
+         SELECT 1 FROM aprobaciones_grupo ag
+         WHERE ag.periodo_id = rp.periodo_id AND ag.empresa = c.empresa
+           AND ag.grupo = ${SQL_GRUPO}
+       )`,
+    [periodoId]
   );
 
   let agregadas = 0;
@@ -377,6 +388,12 @@ export async function transicionarPeriodo(client, periodoId, accion, usuarioId) 
     `UPDATE periodos SET estado=$1${extra} WHERE id=$2 RETURNING *`,
     params
   );
+
+  // Al aprobar el período, se aprueban en bloque todos sus grupos (mantiene la
+  // invariante "APROBADO/CERRADO ⟹ todos los grupos aprobados").
+  if (accion === 'aprobar') {
+    await aprobarTodosLosGrupos(client, periodoId, usuarioId);
+  }
 
   // Al cerrar, acumula las provisiones/pagos del período en la tabla anual por colaborador.
   if (accion === 'cerrar') {
