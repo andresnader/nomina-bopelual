@@ -112,6 +112,31 @@ describe('incidencias de horario', () => {
     expect(segunda.status).toBe(409);
   });
 
+  it('rechaza aplicar si el grupo del rol está aprobado (bloqueado)', async () => {
+    const app = createApp();
+    const col = await crearColaboradorConHorario(app);
+    const incidencia = (
+      await auth(request(app).post(`/api/colaboradores/${col.id}/incidencias-horario`))
+        .send({ fecha: '2026-07-13', hora_entrada_real: '08:40' })
+    ).body;
+    const periodo = await auth(request(app).post('/api/periodos')).send({
+      nombre: `incidencia lock ${Date.now()}`, fecha_inicio: '2026-07-16', fecha_fin: '2026-07-31', quincena: 2
+    });
+    const periodoId = periodo.body.periodo.id;
+    const det = await auth(request(app).get(`/api/periodos/${periodoId}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+
+    // aprobar el grupo del colaborador (BOPELUAL S.A. / ADM) bloquea su edición
+    await auth(request(app).post(`/api/periodos/${periodoId}/grupos/aprobar`))
+      .send({ empresa: 'BOPELUAL S.A.', grupo: 'ADM' });
+
+    const res = await auth(
+      request(app).post(`/api/colaboradores/${col.id}/incidencias-horario/${incidencia.id}/aplicar`)
+    ).send({ rol_pago_id: rol.id });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/grupo aprobado/);
+  });
+
   it('DELETE elimina una incidencia pendiente; rechaza si ya fue aplicada', async () => {
     const app = createApp();
     const col = await crearColaboradorConHorario(app);
