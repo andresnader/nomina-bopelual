@@ -242,6 +242,38 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
   return { agregadas, actualizadas };
 }
 
+// Borra un rol revirtiendo los efectos secundarios de haberlo generado: devuelve
+// la cuota al saldo del préstamo y la cuota consumida del descuento recurrente,
+// reactivándolos. Reutilizable por la reconciliación de salidas y por el borrado
+// manual de un rol.
+export async function eliminarRol(client, rolId) {
+  const { rows: lineas } = await client.query(
+    `SELECT tipo_linea, monto, prestamo_id, descuento_recurrente_id
+     FROM lineas_rol WHERE rol_pago_id=$1
+       AND (prestamo_id IS NOT NULL OR descuento_recurrente_id IS NOT NULL)`,
+    [rolId]
+  );
+  for (const l of lineas) {
+    if (l.prestamo_id) {
+      await client.query(
+        `UPDATE prestamos SET saldo_pendiente = saldo_pendiente + $1, activo = true WHERE id=$2`,
+        [Number(l.monto), l.prestamo_id]
+      );
+    }
+    if (l.descuento_recurrente_id) {
+      await client.query(
+        `UPDATE descuentos_recurrentes
+         SET cuotas_restantes = CASE WHEN cuotas_restantes IS NULL THEN NULL ELSE cuotas_restantes + 1 END,
+             activo = true
+         WHERE id=$1`,
+        [l.descuento_recurrente_id]
+      );
+    }
+  }
+  await client.query('DELETE FROM lineas_rol WHERE rol_pago_id=$1', [rolId]);
+  await client.query('DELETE FROM roles_pago WHERE id=$1', [rolId]);
+}
+
 // Genera el rol_pago de UN colaborador para un período dado, con las mismas
 // líneas automáticas que generarRoles. Si el colaborador es IESS y su fecha
 // de ingreso o de salida cae a mitad de este período, prorratea el
