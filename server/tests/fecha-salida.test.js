@@ -37,12 +37,12 @@ describe('fecha_salida: pago hasta el día trabajado', () => {
     expect(det.body.fecha_salida.slice(0, 10)).toBe('2027-08-08');
   });
 
-  it('prorratea el sueldo/anticipo hasta la fecha de salida (8 de 15 días)', async () => {
+  it('prorratea si la salida cae en los últimos 3 días del período (14 de 15 días)', async () => {
     const app = createApp();
-    const col = await crearColaboradorConContrato(app, { fechaSalida: '2027-08-08' });
+    const col = await crearColaboradorConContrato(app, { fechaSalida: '2027-08-14' });
 
     const per = await auth(request(app).post('/api/periodos')).send({
-      nombre: `salida mitad ${Date.now()}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
+      nombre: `salida cerca ${Date.now()}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
     });
     expect(per.status).toBe(201);
     const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
@@ -51,9 +51,22 @@ describe('fecha_salida: pago hasta el día trabajado', () => {
 
     const { lineas } = (await auth(request(app).get(`/api/roles/${rol.id}`))).body;
     const anticipo = lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA');
-    // factor = 8/15 ≈ 0.53 → 1500 * 40% * 0.53 = 318
-    expect(Number(anticipo.monto)).toBe(318);
+    // factor = 14/15 ≈ 0.93 → 1500 * 40% * 0.93 = 558
+    expect(Number(anticipo.monto)).toBe(558);
     expect(anticipo.descripcion).toContain('prorrateado');
+  });
+
+  it('excluye del período a quien cesa lejos del fin (regla últimos 3 días)', async () => {
+    const app = createApp();
+    const col = await crearColaboradorConContrato(app, { fechaSalida: '2027-08-08' });
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `salida lejos ${Date.now()}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
+    });
+    expect(per.status).toBe(201);
+    const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    // salió el 8, la quincena cierra el 15 → fuera de los últimos 3 días → sin rol
+    expect(det.body.roles_pago.find((r) => r.colaborador_id === col.id)).toBeUndefined();
   });
 
   it('no genera rol si la salida fue antes de que empiece el período', async () => {

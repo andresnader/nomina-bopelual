@@ -24,23 +24,42 @@ describe('nómina gobernada por vínculos de empresa', () => {
     expect(rows[0].fecha_entrada.toISOString().slice(0, 10)).toBe('2027-02-01');
   });
 
-  it('PATCH fecha_salida cierra el vínculo y prorratea (8/15 días)', async () => {
+  it('PATCH fecha_salida cierra el vínculo y prorratea (14/15 días, salida dentro de los últimos 3 días)', async () => {
     const app = createApp();
     const s = Date.now();
     const col = (await auth(request(app).post('/api/colaboradores')).send({
       tipo: 'IESS', nombre: `Prorr ${s}`, cedula: `P${s % 1e8}`, fecha_ingreso: '2027-01-01'
+    })).body;
+    await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ fecha_salida: '2027-08-14' });
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1500, fecha_inicio: '2027-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `vinc cerca fin ${s}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
+    });
+    const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    expect(rol).toBeTruthy();
+    const { lineas } = (await auth(request(app).get(`/api/roles/${rol.id}`))).body;
+    const anticipo = lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA');
+    // factor = 14/15 ≈ 0.93 → 1500 * 40% * 0.93 = 558
+    expect(Number(anticipo.monto)).toBe(558);
+  });
+
+  it('PATCH fecha_salida fuera de los últimos 3 días excluye del rol (liquidación manual aparte)', async () => {
+    const app = createApp();
+    const s = Date.now();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `SaleLejos ${s}`, cedula: `Q${s % 1e8}`, fecha_ingreso: '2027-01-01'
     })).body;
     await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ fecha_salida: '2027-08-08' });
     await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
       sueldo_base: 1500, fecha_inicio: '2027-01-01'
     });
     const per = await auth(request(app).post('/api/periodos')).send({
-      nombre: `vinc mitad ${s}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
+      nombre: `sale lejos ${s}`, fecha_inicio: '2027-08-01', fecha_fin: '2027-08-15', quincena: 1
     });
     const det = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
-    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
-    const { lineas } = (await auth(request(app).get(`/api/roles/${rol.id}`))).body;
-    const anticipo = lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA');
-    expect(Number(anticipo.monto)).toBe(318); // 1500 * 40% * 8/15
+    expect(det.body.roles_pago.find((r) => r.colaborador_id === col.id)).toBeUndefined();
   });
 });

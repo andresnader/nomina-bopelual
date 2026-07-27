@@ -6,6 +6,17 @@ import { aprobarTodosLosGrupos } from './aprobaciones.js';
 import { SQL_GRUPO, grupoDeColaborador } from '../lib/grupos.js';
 import { vinculoQueCubre } from './empleo.js';
 
+// "Últimos 3 días del período": si un colaborador cesa antes del fin del período
+// y su salida NO cae en estos últimos días, se excluye del rol (su liquidación
+// de haberes se hace aparte, manual). Sólo entra al cierre si sigue activo o si
+// salió dentro de esta ventana.
+const DIAS_VENTANA_CIERRE = 3;
+function salidaEntraAlCierre(fechaSalida, fechaFin) {
+  if (!fechaSalida) return true;
+  const dias = Math.round((new Date(fechaFin) - new Date(fechaSalida)) / 86400000);
+  return dias <= DIAS_VENTANA_CIERRE - 1;
+}
+
 export async function crearPeriodo(client, p) {
   const { rows } = await client.query(
     `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, creado_por)
@@ -330,7 +341,8 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
          AND (ep.fecha_salida IS NULL OR ep.fecha_salida >= $1)
        ORDER BY ep.fecha_entrada DESC LIMIT 1
      ) v ON true
-     WHERE c.activo=true`,
+     WHERE c.activo=true
+       AND (v.fecha_salida IS NULL OR v.fecha_salida >= $2::date - ${DIAS_VENTANA_CIERRE - 1})`,
     [periodo.fecha_inicio, periodo.fecha_fin]
   );
 
@@ -374,7 +386,7 @@ export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId)
   for (const periodo of periodosBorrador) {
     // Solo si tiene un vínculo de empresa que cubra este período.
     const vinc = await vinculoQueCubre(client, colaboradorId, periodo.fecha_inicio, periodo.fecha_fin);
-    if (!vinc) continue;
+    if (!vinc || !salidaEntraAlCierre(vinc.fecha_salida, periodo.fecha_fin)) continue;
     const { rows: existente } = await client.query(
       'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]
     );
@@ -418,10 +430,11 @@ export async function reconciliarColaboradorEnPeriodosBorrador(client, colaborad
     if (ag.length > 0) continue;
 
     const vinc = await vinculoQueCubre(client, colaboradorId, periodo.fecha_inicio, periodo.fecha_fin);
+    const daRol = vinc && salidaEntraAlCierre(vinc.fecha_salida, periodo.fecha_fin);
     const { rows: rolExistente } = await client.query(
       'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]);
 
-    if (!vinc) {
+    if (!daRol) {
       if (rolExistente.length > 0) await eliminarRol(client, rolExistente[0].id);
       continue;
     }
