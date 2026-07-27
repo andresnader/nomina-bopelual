@@ -33,14 +33,14 @@ function FichaTab({ col, onGuardado, onError }) {
   const toast = useToast();
   const [bancos, setBancos] = useState([]);
   const [horarios, setHorarios] = useState([]);
+  const [vinculosAbierto, setVinculosAbierto] = useState(false);
   useEffect(() => {
     api.get('/bancos').then(setBancos).catch(() => {});
     api.get('/horarios').then(setHorarios).catch(() => {});
   }, []);
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
-    departamento: col.departamento ?? '', cargo: col.cargo ?? '', fecha_ingreso: col.fecha_ingreso?.slice(0, 10) ?? '',
-    fecha_salida: col.fecha_salida?.slice(0, 10) ?? '',
+    departamento: col.departamento ?? '', cargo: col.cargo ?? '',
     clasificacion: col.clasificacion ?? 'ADMINISTRATIVO',
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
@@ -61,8 +61,6 @@ function FichaTab({ col, onGuardado, onError }) {
     try {
       await api.patch(`/colaboradores/${col.id}`, {
         ...form,
-        fecha_ingreso: form.fecha_ingreso || null,
-        fecha_salida: form.fecha_salida || null,
         cargas_personales: Number(form.cargas_personales) || 0,
         pct_anticipo: form.pct_anticipo === '' ? null : Number(form.pct_anticipo),
         fecha_nacimiento: form.fecha_nacimiento || null,
@@ -84,6 +82,7 @@ function FichaTab({ col, onGuardado, onError }) {
   );
 
   return (
+    <>
     <form onSubmit={guardar} className="grid gap-4">
       <Card>
         <h2 className="font-semibold mb-3">Datos personales y laborales</h2>
@@ -119,8 +118,15 @@ function FichaTab({ col, onGuardado, onError }) {
             </select>
           </label>
           <label className="text-sm text-slate-600">Dirección de domicilio {campo('direccion')}</label>
-          <label className="text-sm text-slate-600">Fecha de ingreso (IESS) {campo('fecha_ingreso', { type: 'date' })}</label>
-          <label className="text-sm text-slate-600">Fecha de salida (último día trabajado) {campo('fecha_salida', { type: 'date' })}</label>
+          <div className="text-sm text-slate-600">
+            <span className="block mb-1">Fechas Ingreso/Salida Empresa</span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">
+                {col.fecha_ingreso?.slice(0, 10) || '—'} → {col.fecha_salida?.slice(0, 10) || 'Activo'}
+              </span>
+              <button type="button" onClick={() => setVinculosAbierto(true)} className="btn btn-secondary">Detalles</button>
+            </div>
+          </div>
           <label className="text-sm text-slate-600">Empresa
             <select className="input w-full" value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })}>
               <option value="">—</option>
@@ -200,6 +206,90 @@ function FichaTab({ col, onGuardado, onError }) {
         <button className="btn btn-primary">Guardar ficha</button>
       </div>
     </form>
+    {vinculosAbierto && (
+      <VinculosEmpresaModal
+        colaboradorId={col.id}
+        onClose={() => setVinculosAbierto(false)}
+        onGuardado={() => { setVinculosAbierto(false); onGuardado(); }}
+      />
+    )}
+    </>
+  );
+}
+
+// Modal estilo Contífico: historial de vínculos de EMPRESA (entrada/salida, con
+// re-ingresos). Al marcar una salida, el backend saca al colaborador de los
+// períodos en borrador posteriores (reconciliación).
+function VinculosEmpresaModal({ colaboradorId, onClose, onGuardado }) {
+  const [vinculos, setVinculos] = useState([]);
+  const [error, setError] = useState(null);
+
+  const cargar = () => api.get(`/colaboradores/${colaboradorId}/empleo-periodos`).then(setVinculos).catch((e) => setError(e.message));
+  useEffect(() => { cargar(); }, [colaboradorId]);
+
+  const agregar = async () => {
+    try {
+      await api.post(`/colaboradores/${colaboradorId}/empleo-periodos`, {
+        fecha_entrada: new Date().toISOString().slice(0, 10), fecha_salida: null,
+      });
+      cargar();
+    } catch (e) { setError(e.message); }
+  };
+  const guardarFila = async (v, campos) => {
+    setError(null);
+    try {
+      await api.patch(`/colaboradores/${colaboradorId}/empleo-periodos/${v.id}`, {
+        fecha_entrada: v.fecha_entrada?.slice(0, 10),
+        fecha_salida: v.fecha_salida?.slice(0, 10) || null,
+        ...campos,
+      });
+      cargar();
+    } catch (e) { setError(e.message); }
+  };
+  const borrar = async (v) => {
+    try { await api.del(`/colaboradores/${colaboradorId}/empleo-periodos/${v.id}`); cargar(); }
+    catch (e) { setError(e.message); }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Fechas de Ingreso y Salida Empresa" size="lg">
+      <p className="text-sm text-muted mb-3">
+        Estas son las fechas de empresa (distintas del IESS). Al marcar una salida, el colaborador se quita
+        automáticamente de los períodos en borrador posteriores.
+      </p>
+      {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
+      <table className="w-full text-sm">
+        <thead className="text-slate-500 text-left">
+          <tr className="border-b border-slate-200">
+            <th className="p-2">Entrada</th><th className="p-2">Salida</th><th className="p-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {vinculos.map((v) => (
+            <tr key={v.id} className="border-b border-slate-200">
+              <td className="p-2">
+                <input type="date" className="input" defaultValue={v.fecha_entrada?.slice(0, 10)}
+                  onBlur={(e) => guardarFila(v, { fecha_entrada: e.target.value })} />
+              </td>
+              <td className="p-2">
+                <input type="date" className="input" defaultValue={v.fecha_salida?.slice(0, 10) || ''}
+                  onBlur={(e) => guardarFila(v, { fecha_salida: e.target.value || null })} />
+              </td>
+              <td className="p-2 text-right">
+                <button type="button" onClick={() => borrar(v)} className="text-slate-400 hover:text-red-600" title="Eliminar">🗑</button>
+              </td>
+            </tr>
+          ))}
+          {vinculos.length === 0 && (
+            <tr><td colSpan={3} className="p-3 text-center text-slate-500">Sin vínculos</td></tr>
+          )}
+        </tbody>
+      </table>
+      <div className="flex items-center justify-between mt-3">
+        <button type="button" onClick={agregar} className="btn btn-secondary">+ Agregar Fecha</button>
+        <button type="button" onClick={onGuardado} className="btn btn-primary">Aceptar</button>
+      </div>
+    </Modal>
   );
 }
 
