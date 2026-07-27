@@ -190,6 +190,52 @@ function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
   );
 }
 
+// Tarjeta de aprobación por grupo (empresa × grupo). Cada grupo se aprueba y
+// bloquea de edición por separado mientras el período está en BORRADOR.
+function GruposPeriodo({ periodoId, grupos, onCambio }) {
+  const toast = useToast();
+  const accion = async (ruta, empresa, grupo) => {
+    try {
+      await api.post(`/periodos/${periodoId}/grupos/${ruta}`, { empresa, grupo });
+      onCambio();
+    } catch (e) { toast.error(e.message); }
+  };
+  if (!grupos?.length) return null;
+  return (
+    <Card className="mb-4">
+      <h2 className="font-semibold">Grupos del período</h2>
+      <p className="text-sm text-muted mb-3">Aprueba y bloquea cada grupo por separado. Al aprobar, sus roles quedan bloqueados de edición.</p>
+      <div className="overflow-x-auto -mx-4 md:mx-0">
+        <table className="w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-3">Empresa</th><th className="p-3">Grupo</th>
+              <th className="p-3 text-right">Colaboradores</th><th className="p-3 text-right">Neto</th>
+              <th className="p-3">Estado</th><th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map((g) => (
+              <tr key={`${g.empresa}-${g.grupo}`} className="border-b border-slate-200">
+                <td className="p-3">{g.empresa}</td>
+                <td className="p-3">{g.etiqueta}</td>
+                <td className="p-3 text-right">{g.colaboradores}</td>
+                <td className="p-3 text-right">{money(g.total_neto)}</td>
+                <td className="p-3"><Badge estado={g.aprobado ? 'APROBADO' : 'PENDIENTE'} /></td>
+                <td className="p-3 text-right">
+                  {g.aprobado
+                    ? <button onClick={() => accion('reabrir', g.empresa, g.grupo)} className="btn btn-secondary">Reabrir</button>
+                    : <button onClick={() => accion('aprobar', g.empresa, g.grupo)} className="btn btn-primary">Aprobar grupo</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 export default function PeriodoDetalle() {
   const { id } = useParams();
   const [periodo, setPeriodo] = useState(null);
@@ -291,6 +337,12 @@ export default function PeriodoDetalle() {
           </div>
         </div>
       </Card>
+
+      {periodo.estado === 'BORRADOR' && (
+        <RoleGate roles={['ADMIN', 'RRHH']}>
+          <GruposPeriodo periodoId={id} grupos={periodo.grupos} onCambio={cargar} />
+        </RoleGate>
+      )}
 
       <Card className="p-0 overflow-x-auto mb-4">
         <table className="hidden md:table w-full text-sm">
