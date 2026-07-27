@@ -18,6 +18,13 @@ const GRUPOS = [
   { valor: 'SERV_PROF', label: 'Serv. Profesionales' },
 ];
 
+const TIPOS_PAGO = [
+  { valor: 'TRANSFERENCIA', label: 'Transferencia' },
+  { valor: 'CHEQUE', label: 'Cheque' },
+  { valor: 'PENDIENTE', label: 'Pendiente' },
+];
+const labelTipoPago = (v) => TIPOS_PAGO.find((t) => t.valor === v)?.label ?? v;
+
 function descargarBlob(nombre, blob) {
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
@@ -35,7 +42,7 @@ function base64ABlob(b64, tipo) {
 // Sección final del período: genera la vista de la nómina con la marca de
 // pago por TXT por colaborador, y las descargas del Excel (todos) y del TXT
 // del banco (solo marcados).
-function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
+function GenerarNomina({ periodoId, filas, empresa }) {
   const [generada, setGenerada] = useState(false);
   const [aviso, setAviso] = useState(null);
   const toast = useToast();
@@ -78,7 +85,7 @@ function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
     );
   }
 
-  const marcados = filas.filter((r) => r.incluir_en_txt !== false);
+  const marcados = filas.filter((r) => r.tipo_pago === 'TRANSFERENCIA');
   const totalMarcados = marcados.reduce((s, r) => s + Number(r.neto), 0);
 
   return (
@@ -87,7 +94,7 @@ function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
         <div>
           <h2 className="font-semibold">Nómina generada</h2>
           <p className="text-sm text-muted">
-            {filas.length} colaboradores · {marcados.length} marcados para TXT por {money(totalMarcados)}
+            {filas.length} colaboradores · {marcados.length} por transferencia (TXT) por {money(totalMarcados)}
           </p>
         </div>
         <button onClick={() => descargarExcel().catch((e) => setAviso({ error: e.message }))}
@@ -105,22 +112,18 @@ function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
               <th className="p-3 text-right">Ingresos</th>
               <th className="p-3 text-right">Descuentos</th>
               <th className="p-3 text-right">Neto</th>
-              <th className="p-3 text-center" title="Marcar/desmarcar quién se paga por el TXT del banco">Pagar TXT</th>
+              <th className="p-3">Tipo de pago</th>
             </tr>
           </thead>
           <tbody>
             {filas.map((r) => (
-              <tr key={r.id} className={`border-b border-slate-200 ${r.incluir_en_txt === false ? 'bg-slate-50 text-slate-400' : 'hover:bg-slate-50'}`}>
+              <tr key={r.id} className="border-b border-slate-200 hover:bg-slate-50">
                 <td className="p-3 font-medium">{r.colaborador_nombre}</td>
                 <td className="p-3">{r.colaborador_empresa || '—'}</td>
                 <td className="p-3 text-right">{money(r.total_ingresos)}</td>
                 <td className="p-3 text-right">{money(r.total_descuentos)}</td>
                 <td className="p-3 text-right font-semibold">{money(r.neto)}</td>
-                <td className="p-3 text-center">
-                  <input type="checkbox" className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                    checked={r.incluir_en_txt !== false}
-                    onChange={() => onToggleTxt(r)} />
-                </td>
+                <td className="p-3">{labelTipoPago(r.tipo_pago)}</td>
               </tr>
             ))}
           </tbody>
@@ -139,12 +142,7 @@ function GenerarNomina({ periodoId, filas, empresa, onToggleTxt }) {
               meta={
                 <span className="flex items-center justify-between">
                   <span>{r.colaborador_empresa || '—'}</span>
-                  <label className="flex items-center gap-2 text-slate-600">
-                    <input type="checkbox" className="w-4 h-4 accent-emerald-600"
-                      checked={r.incluir_en_txt !== false}
-                      onChange={() => onToggleTxt(r)} />
-                    Pagar TXT
-                  </label>
+                  <span className="text-slate-600">{labelTipoPago(r.tipo_pago)}</span>
                 </span>
               }
               footer={
@@ -272,16 +270,14 @@ export default function PeriodoDetalle() {
     }
   };
 
-  // Marca/desmarca el pago por TXT de un rol y actualiza el estado local sin
-  // recargar todo el período (la tabla puede ser larga).
-  const toggleTxt = async (rol) => {
+  // Cambia el tipo de pago de un rol (Cheque/Transferencia/Pendiente) y
+  // actualiza el estado local sin recargar todo el período.
+  const cambiarTipoPago = async (rol, tipo_pago) => {
     try {
-      const r = await api.patch(`/periodos/${id}/roles/${rol.id}/incluir-txt`, {
-        incluir: rol.incluir_en_txt === false,
-      });
+      const r = await api.patch(`/periodos/${id}/roles/${rol.id}/tipo-pago`, { tipo_pago });
       setPeriodo((p) => ({
         ...p,
-        roles_pago: p.roles_pago.map((x) => (x.id === rol.id ? { ...x, incluir_en_txt: r.incluir_en_txt } : x)),
+        roles_pago: p.roles_pago.map((x) => (x.id === rol.id ? { ...x, tipo_pago: r.tipo_pago } : x)),
       }));
     } catch (err) {
       toast.error(err.message);
@@ -354,7 +350,7 @@ export default function PeriodoDetalle() {
               <th className="p-3 text-right">Ingresos</th>
               <th className="p-3 text-right">Descuentos</th>
               <th className="p-3 text-right">Neto</th>
-              <th className="p-3">Pago</th>
+              <th className="p-3">Tipo de pago</th>
             </tr>
           </thead>
           <tbody>
@@ -370,7 +366,12 @@ export default function PeriodoDetalle() {
                 <td className="p-3 text-right">{money(r.total_ingresos)}</td>
                 <td className="p-3 text-right">{money(r.total_descuentos)}</td>
                 <td className="p-3 text-right font-semibold">{money(r.neto)}</td>
-                <td className="p-3"><Badge estado={r.estado_pago} /></td>
+                <td className="p-3">
+                  <select className="input" value={r.tipo_pago}
+                    onChange={(e) => cambiarTipoPago(r, e.target.value)}>
+                    {TIPOS_PAGO.map((t) => <option key={t.valor} value={t.valor}>{t.label}</option>)}
+                  </select>
+                </td>
               </tr>
             ))}
             {filas.length === 0 && (
@@ -389,7 +390,10 @@ export default function PeriodoDetalle() {
               top={
                 <>
                   <Link to={`/roles/${r.id}`} className="text-gold-600 font-medium hover:underline">{r.colaborador_nombre}</Link>
-                  <Badge estado={r.estado_pago} />
+                  <select className="input" value={r.tipo_pago}
+                    onChange={(e) => cambiarTipoPago(r, e.target.value)}>
+                    {TIPOS_PAGO.map((t) => <option key={t.valor} value={t.valor}>{t.label}</option>)}
+                  </select>
                 </>
               }
               meta={
@@ -410,7 +414,7 @@ export default function PeriodoDetalle() {
       </Card>
 
       <RoleGate roles={['ADMIN', 'RRHH']}>
-        <GenerarNomina periodoId={id} filas={filas} empresa={empresa} onToggleTxt={toggleTxt} />
+        <GenerarNomina periodoId={id} filas={filas} empresa={empresa} />
       </RoleGate>
     </div>
   );

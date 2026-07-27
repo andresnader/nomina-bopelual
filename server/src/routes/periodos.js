@@ -145,17 +145,16 @@ router.delete('/:id/roles/:rolId', requireRole(['ADMIN', 'RRHH']), async (req, r
   }
 });
 
-// Marca/desmarca si un rol se paga por el TXT masivo del banco. El Excel de
-// la nómina no se ve afectado: siempre incluye a todos. No se restringe por
-// estado del período porque el TXT se regenera incluso después de cerrado.
-router.patch('/:id/roles/:rolId/incluir-txt', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { incluir } = req.body;
-  if (typeof incluir !== 'boolean') return res.status(400).json({ error: 'incluir (boolean) requerido' });
+// Tipo de pago por rol: TRANSFERENCIA (entra al TXT), CHEQUE (pago fuera del
+// TXT) o PENDIENTE (no se paga por el rol; liquidación de haberes manual). No se
+// restringe por estado porque el TXT se regenera incluso después de cerrado.
+const TIPOS_PAGO = ['CHEQUE', 'TRANSFERENCIA', 'PENDIENTE'];
+router.patch('/:id/roles/:rolId/tipo-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { tipo_pago } = req.body;
+  if (!TIPOS_PAGO.includes(tipo_pago)) return res.status(400).json({ error: 'tipo_pago inválido' });
   const { rows } = await pool.query(
-    `UPDATE roles_pago SET incluir_en_txt=$1
-     WHERE id=$2 AND periodo_id=$3
-     RETURNING id, incluir_en_txt`,
-    [incluir, req.params.rolId, req.params.id]
+    `UPDATE roles_pago SET tipo_pago=$1 WHERE id=$2 AND periodo_id=$3 RETURNING id, tipo_pago`,
+    [tipo_pago, req.params.rolId, req.params.id]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'rol no encontrado en este período' });
   res.json(rows[0]);
@@ -195,27 +194,24 @@ router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => 
 
   const params = [req.params.id];
   if (empresa) params.push(empresa);
-  // Solo entran los roles marcados para pago por TXT (incluir_en_txt); los
-  // desmarcados se pagan por otro medio y ni siquiera se reportan aquí.
+  // Solo entran los roles con tipo de pago TRANSFERENCIA; cheque/pendiente se
+  // pagan por otro medio y ni siquiera se reportan aquí.
   const { rows } = await pool.query(
-    `SELECT rp.neto, c.nombre, c.cedula, c.cuenta_bancaria, c.tipo_cuenta, c.codigo_banco,
-            c.forma_pago
+    `SELECT rp.neto, c.nombre, c.cedula, c.cuenta_bancaria, c.tipo_cuenta, c.codigo_banco
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
-     WHERE rp.periodo_id=$1 AND rp.neto > 0 AND rp.incluir_en_txt
+     WHERE rp.periodo_id=$1 AND rp.neto > 0 AND rp.tipo_pago='TRANSFERENCIA'
        ${empresa ? 'AND c.empresa=$2' : ''}
        ${grupo ? `AND ${FILTRO_GRUPO[grupo]}` : ''}
      ORDER BY c.nombre`,
     params
   );
 
-  // Solo entran transferencias con datos bancarios completos; el resto se
-  // reporta para que RRHH los pague por otro medio o complete la ficha.
-  const pagables = rows.filter(
-    (r) => r.forma_pago === 'TRANSFERENCIA' && r.cuenta_bancaria && r.cedula && r.codigo_banco
-  );
+  // Solo entran las que tienen datos bancarios completos; el resto se reporta
+  // para que RRHH los pague por otro medio o complete la ficha.
+  const pagables = rows.filter((r) => r.cuenta_bancaria && r.cedula && r.codigo_banco);
   const excluidos = rows
     .filter((r) => !pagables.includes(r))
-    .map((r) => ({ nombre: r.nombre, neto: r.neto, motivo: !r.cuenta_bancaria || !r.cedula || !r.codigo_banco ? 'sin datos bancarios' : 'forma de pago no es transferencia' }));
+    .map((r) => ({ nombre: r.nombre, neto: r.neto, motivo: 'sin datos bancarios' }));
 
   const descripcion = `ROL DE PAGOS ${p[0].nombre}`.toUpperCase().slice(0, 40);
   const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -241,7 +237,7 @@ router.get('/:id/excel', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   if (p.length === 0) return res.status(404).json({ error: 'no encontrado' });
 
   const { rows: roles } = await pool.query(
-    `SELECT rp.total_ingresos, rp.total_descuentos, rp.neto, rp.incluir_en_txt,
+    `SELECT rp.total_ingresos, rp.total_descuentos, rp.neto, rp.tipo_pago,
             c.nombre, c.cedula, c.tipo, c.empresa, c.forma_pago, c.clasificacion
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
      WHERE rp.periodo_id=$1

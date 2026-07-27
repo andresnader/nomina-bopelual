@@ -41,30 +41,24 @@ describe('nómina generada: marca TXT, Excel y aprobar/cerrar', () => {
       ON CONFLICT (email) DO UPDATE SET activo=true, rol='RRHH'`);
   });
 
-  it('PATCH incluir-txt marca/desmarca un rol y valida entrada', async () => {
+  it('PATCH tipo-pago cambia el tipo y valida entrada', async () => {
     const app = createApp();
     const { periodoId, rolTxt } = await crearPeriodoConRoles();
 
-    const off = await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolTxt}/incluir-txt`))
-      .send({ incluir: false });
-    expect(off.status).toBe(200);
-    expect(off.body.incluir_en_txt).toBe(false);
+    const cheque = await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolTxt}/tipo-pago`))
+      .send({ tipo_pago: 'CHEQUE' });
+    expect(cheque.status).toBe(200);
+    expect(cheque.body.tipo_pago).toBe('CHEQUE');
 
     // persiste al recargar el período
     const det = await auth(request(app).get(`/api/periodos/${periodoId}`));
-    expect(det.body.roles_pago.find((r) => r.id === rolTxt).incluir_en_txt).toBe(false);
-    // el otro rol sigue marcado por defecto
-    expect(det.body.roles_pago.find((r) => r.id !== rolTxt).incluir_en_txt).toBe(true);
+    expect(det.body.roles_pago.find((r) => r.id === rolTxt).tipo_pago).toBe('CHEQUE');
 
-    const on = await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolTxt}/incluir-txt`))
-      .send({ incluir: true });
-    expect(on.body.incluir_en_txt).toBe(true);
-
-    const malBody = await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolTxt}/incluir-txt`))
-      .send({ incluir: 'si' });
+    const malBody = await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolTxt}/tipo-pago`))
+      .send({ tipo_pago: 'EFECTIVO' });
     expect(malBody.status).toBe(400);
-    const otroPeriodo = await auth(request(app).patch(`/api/periodos/00000000-0000-0000-0000-000000000000/roles/${rolTxt}/incluir-txt`))
-      .send({ incluir: false });
+    const otroPeriodo = await auth(request(app).patch(`/api/periodos/00000000-0000-0000-0000-000000000000/roles/${rolTxt}/tipo-pago`))
+      .send({ tipo_pago: 'CHEQUE' });
     expect(otroPeriodo.status).toBe(404);
   });
 
@@ -72,8 +66,8 @@ describe('nómina generada: marca TXT, Excel y aprobar/cerrar', () => {
     const app = createApp();
     const { periodoId, rolCheque } = await crearPeriodoConRoles();
 
-    await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolCheque}/incluir-txt`))
-      .send({ incluir: false });
+    await auth(request(app).patch(`/api/periodos/${periodoId}/roles/${rolCheque}/tipo-pago`))
+      .send({ tipo_pago: 'CHEQUE' });
 
     const txt = await auth(request(app).get(`/api/periodos/${periodoId}/txt-pago`));
     expect(txt.status).toBe(200);

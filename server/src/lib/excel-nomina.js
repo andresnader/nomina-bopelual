@@ -14,7 +14,7 @@ const ANCHOS_NOMINA = [
   { wch: 12 }, // Descuentos
   { wch: 12 }, // Neto
   { wch: 14 }, // Forma de pago
-  { wch: 10 }, // Pago TXT
+  { wch: 14 }, // Tipo de pago
 ];
 
 const ANCHOS_DETALLE = [
@@ -41,7 +41,7 @@ export function generarExcelNomina(roles, lineas) {
     Descuentos: Number(r.total_descuentos),
     Neto: Number(r.neto),
     'Forma de pago': r.forma_pago ?? '',
-    'Pago TXT': r.incluir_en_txt ? 'SÍ' : 'NO',
+    'Tipo de pago': r.tipo_pago ?? '',
   }));
   const wsResumen = XLSX.utils.json_to_sheet(resumen);
   wsResumen['!cols'] = ANCHOS_NOMINA;

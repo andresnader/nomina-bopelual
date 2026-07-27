@@ -288,9 +288,10 @@ export async function eliminarRol(client, rolId) {
 // desde generarRoles (período nuevo) y agregarColaboradorAPeriodosBorrador
 // (colaborador nuevo).
 async function generarRolColaborador(client, periodoId, periodo, col, pctAnticipoGlobal, sbu) {
+  const tipoPago = col.forma_pago === 'TRANSFERENCIA' ? 'TRANSFERENCIA' : 'CHEQUE';
   const { rows: rolRows } = await client.query(
-    `INSERT INTO roles_pago (periodo_id, colaborador_id) VALUES ($1,$2) RETURNING id`,
-    [periodoId, col.id]
+    `INSERT INTO roles_pago (periodo_id, colaborador_id, tipo_pago) VALUES ($1,$2,$3) RETURNING id`,
+    [periodoId, col.id, tipoPago]
   );
   const rolId = rolRows[0].id;
 
