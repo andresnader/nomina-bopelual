@@ -38,26 +38,26 @@ describe('API aprobación por grupo', () => {
     expect(det.body.grupos).toHaveLength(2);
     expect(det.body.grupos.every((g) => g.aprobado === false)).toBe(true);
 
-    const ap = await auth(request(app).post(`/api/periodos/${id}/grupos/aprobar`))
-      .send({ empresa: 'BOPELUAL S.A.', grupo: 'COMERCIAL' });
+    const ap = await auth(request(app).post(`/api/periodos/${id}/combinaciones/aprobar`))
+      .send({ empresa: 'BOPELUAL S.A.', tipo: 'IESS', clasificacion: 'COMERCIAL' });
     expect(ap.status).toBe(200);
 
     det = await auth(request(app).get(`/api/periodos/${id}`));
-    expect(det.body.grupos.find((g) => g.grupo === 'COMERCIAL').aprobado).toBe(true);
-    expect(det.body.grupos.find((g) => g.grupo === 'ADM').aprobado).toBe(false);
+    expect(det.body.grupos.find((g) => g.tipo === 'IESS' && g.clasificacion === 'COMERCIAL').aprobado).toBe(true);
+    expect(det.body.grupos.find((g) => g.tipo === 'IESS' && g.clasificacion === 'ADMINISTRATIVO').aprobado).toBe(false);
 
-    const re = await auth(request(app).post(`/api/periodos/${id}/grupos/reabrir`))
-      .send({ empresa: 'BOPELUAL S.A.', grupo: 'COMERCIAL' });
+    const re = await auth(request(app).post(`/api/periodos/${id}/combinaciones/reabrir`))
+      .send({ empresa: 'BOPELUAL S.A.', tipo: 'IESS', clasificacion: 'COMERCIAL' });
     expect(re.status).toBe(200);
     det = await auth(request(app).get(`/api/periodos/${id}`));
-    expect(det.body.grupos.find((g) => g.grupo === 'COMERCIAL').aprobado).toBe(false);
+    expect(det.body.grupos.find((g) => g.tipo === 'IESS' && g.clasificacion === 'COMERCIAL').aprobado).toBe(false);
   });
 
-  it('grupo inválido -> 400', async () => {
+  it('tipo/clasificación inválidos -> 400', async () => {
     const app = createApp();
     const id = await periodoConDosGrupos();
-    const bad = await auth(request(app).post(`/api/periodos/${id}/grupos/aprobar`))
-      .send({ empresa: 'BOPELUAL S.A.', grupo: 'XXX' });
+    const bad = await auth(request(app).post(`/api/periodos/${id}/combinaciones/aprobar`))
+      .send({ empresa: 'BOPELUAL S.A.', tipo: 'XXX', clasificacion: 'COMERCIAL' });
     expect(bad.status).toBe(400);
   });
 });

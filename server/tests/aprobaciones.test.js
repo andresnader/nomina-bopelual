@@ -25,36 +25,36 @@ async function semilla(client) {
 }
 
 describe('servicio aprobaciones', () => {
-  it('deriva 3 grupos con conteo y total, todos pendientes', async () => {
+  it('deriva 3 combinaciones con conteo y total, todas pendientes', async () => {
     await withRollback(async (client) => {
       const { periodoId } = await semilla(client);
       const grupos = await gruposDePeriodo(client, periodoId);
       expect(grupos).toHaveLength(3);
-      const com = grupos.find((g) => g.empresa === 'BOPELUAL S.A.' && g.grupo === 'COMERCIAL');
+      const com = grupos.find((g) => g.empresa === 'BOPELUAL S.A.' && g.tipo === 'IESS' && g.clasificacion === 'COMERCIAL');
       expect(com.colaboradores).toBe(1);
       expect(Number(com.total_neto)).toBe(100);
       expect(com.aprobado).toBe(false);
-      expect(com.etiqueta).toBe('Comercial');
+      expect(com.etiqueta).toBe('IESS · COMERCIAL');
     });
   });
 
-  it('aprobar marca solo ese grupo; reabrir lo revierte', async () => {
+  it('aprobar marca solo esa combinación; reabrir la revierte', async () => {
     await withRollback(async (client) => {
       const { periodoId, usuarioId } = await semilla(client);
-      await aprobarGrupo(client, periodoId, 'BOPELUAL S.A.', 'COMERCIAL', usuarioId);
-      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'COMERCIAL')).toBe(true);
-      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'ADM')).toBe(false);
+      await aprobarGrupo(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'COMERCIAL', usuarioId);
+      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'COMERCIAL')).toBe(true);
+      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'ADMINISTRATIVO')).toBe(false);
       const grupos = await gruposDePeriodo(client, periodoId);
-      expect(grupos.find((g) => g.grupo === 'COMERCIAL' && g.empresa === 'BOPELUAL S.A.').aprobado_por).toBe(usuarioId);
-      await reabrirGrupo(client, periodoId, 'BOPELUAL S.A.', 'COMERCIAL');
-      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'COMERCIAL')).toBe(false);
+      expect(grupos.find((g) => g.tipo === 'IESS' && g.clasificacion === 'COMERCIAL' && g.empresa === 'BOPELUAL S.A.').aprobado_por).toBe(usuarioId);
+      await reabrirGrupo(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'COMERCIAL');
+      expect(await grupoAprobado(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'COMERCIAL')).toBe(false);
     });
   });
 
-  it('aprobarTodosLosGrupos aprueba los 3 y es idempotente', async () => {
+  it('aprobarTodosLosGrupos aprueba las 3 y es idempotente', async () => {
     await withRollback(async (client) => {
       const { periodoId, usuarioId } = await semilla(client);
-      await aprobarGrupo(client, periodoId, 'BOPELUAL S.A.', 'COMERCIAL', usuarioId);
+      await aprobarGrupo(client, periodoId, 'BOPELUAL S.A.', 'IESS', 'COMERCIAL', usuarioId);
       await aprobarTodosLosGrupos(client, periodoId, usuarioId);
       await aprobarTodosLosGrupos(client, periodoId, usuarioId); // idempotente
       const grupos = await gruposDePeriodo(client, periodoId);

@@ -30,6 +30,6 @@ describe('aprobar período aprueba en bloque sus grupos', () => {
     expect(ap.body.estado).toBe('APROBADO');
 
     const det = await auth(request(app).get(`/api/periodos/${p[0].id}`));
-    expect(det.body.grupos.find((g) => g.grupo === 'COMERCIAL').aprobado).toBe(true);
+    expect(det.body.grupos.find((g) => g.tipo === 'IESS' && g.clasificacion === 'COMERCIAL').aprobado).toBe(true);
   });
 });

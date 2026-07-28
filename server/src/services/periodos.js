@@ -3,7 +3,7 @@ import * as calc from '../lib/calculo.js';
 import { round2 } from '../lib/round.js';
 import { recalcularTotales } from './roles.js';
 import { aprobarTodosLosGrupos } from './aprobaciones.js';
-import { SQL_GRUPO, grupoDeColaborador } from '../lib/grupos.js';
+
 import { vinculoQueCubre } from './empleo.js';
 
 // "Últimos 3 días del período": si un colaborador cesa antes del fin del período
@@ -56,11 +56,11 @@ async function insertarOActualizarLinea(client, rolId, existentesPorTipo, { tipo
 // inserta porque existentesPorTipo llega vacío) como aplicarSueldoPendiente
 // (rol ya generado, se compara y actualiza lo que cambió) — antes cada una
 // tenía su propia copia de esta fórmula y podían desincronizarse entre sí.
-async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, sbu, existentesPorTipo) {
+async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, pctAnticipoExterno, sbu, existentesPorTipo) {
   const sueldo = Number(col.sueldo_base);
   const bono = Number(col.bono);
   const quincena = periodo.quincena;
-  const pct = col.pct_anticipo != null ? Number(col.pct_anticipo) : pctAnticipoGlobal;
+  const pct = pctAnticipoPorTipo(col, pctAnticipoGlobal, pctAnticipoExterno);
   const factor = col.tipo === 'IESS'
     ? calc.factorProrrateo(col.vinc_entrada, col.vinc_salida, periodo.fecha_inicio, periodo.fecha_fin)
     : 1;
@@ -73,7 +73,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
     else if (r === 'actualizada') actualizadas++;
   };
 
-  if (quincena === 1) {
+  if (quincena === '1') {
     await aplicar({
       tipo: 'ANTICIPO_QUINCENA', clase: 'INGRESO', monto: round2(calc.anticipoQuincena(sueldo, pct) * factor),
       desc: `Anticipo primera quincena (${(pct * 100).toFixed(0)}%)${sufijoProrrateo}`
@@ -112,7 +112,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
   for (const rubro of rubros) {
     const montoMensual = Number(rubro.valor_mensual);
     if (montoMensual <= 0) continue;
-    const monto = quincena === 1 ? round2(montoMensual * pct * factor) : round2(montoMensual * (1 - pct) * factor);
+    const monto = quincena === '1' ? round2(montoMensual * pct * factor) : round2(montoMensual * (1 - pct) * factor);
     if (monto > 0) {
       await aplicar({
         tipo: `RUBRO_${rubro.tipo}`, clase: 'INGRESO', monto,
@@ -147,11 +147,12 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
 
   // Obtener parámetros globales.
   const { rows: paramRows } = await client.query(
-    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO')`
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO','PORCENTAJE_ANTICIPO_EXTERNO')`
   );
   const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
   const sbu = Number(params.SBU ?? '460');
   const pctGlobal = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+  const pctExterno = Number(params.PORCENTAJE_ANTICIPO_EXTERNO ?? '0.50');
 
   // Líneas de sueldo que ya existen en el rol, con su id/monto/descripción
   // para poder comparar y actualizar si el cálculo ya no coincide.
@@ -165,7 +166,7 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
   const existentesPorTipo = new Map(existentes.map((e) => [e.tipo_linea, e]));
 
   const periodo = { quincena, fecha_inicio: periodoFechaInicio, fecha_fin: periodoFechaFin };
-  return aplicarLineasSueldo(client, rolId, col, periodo, pctGlobal, sbu, existentesPorTipo);
+  return aplicarLineasSueldo(client, rolId, col, periodo, pctGlobal, pctExterno, sbu, existentesPorTipo);
 }
 
 // Aplica al rol las cuotas de préstamos activos que aún no tenga (por
@@ -206,6 +207,7 @@ export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, p
 // refresca el monto/tipo/descripción de los que ya tenga si el descuento
 // origen fue editado después de generado el rol.
 export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, quincena, periodoFechaInicio) {
+  const q = Number(quincena);
   // Desactivación perezosa: si este período ya empieza después de la fecha
   // de vencimiento, el descuento deja de aplicarse desde aquí en adelante.
   // La consulta de abajo ya filtra activo=true, así que no hace falta
@@ -221,7 +223,7 @@ export async function aplicarDescuentosPendientes(client, rolId, colaboradorId, 
   const { rows: descuentos } = await client.query(
     `SELECT d.* FROM descuentos_recurrentes d
      WHERE d.colaborador_id=$1 AND d.activo=true AND d.aplicar_en IN (0,$2)`,
-    [colaboradorId, quincena]
+    [colaboradorId, q]
   );
   let agregadas = 0;
   let actualizadas = 0;
@@ -298,7 +300,7 @@ export async function eliminarRol(client, rolId) {
 // quincena) — los colaboradores EXTERNO nunca se prorratean. Reutilizable
 // desde generarRoles (período nuevo) y agregarColaboradorAPeriodosBorrador
 // (colaborador nuevo).
-async function generarRolColaborador(client, periodoId, periodo, col, pctAnticipoGlobal, sbu) {
+async function generarRolColaborador(client, periodoId, periodo, col, pctAnticipoGlobal, pctAnticipoExterno, sbu) {
   const tipoPago = col.forma_pago === 'TRANSFERENCIA' ? 'TRANSFERENCIA' : 'CHEQUE';
   const { rows: rolRows } = await client.query(
     `INSERT INTO roles_pago (periodo_id, colaborador_id, tipo_pago) VALUES ($1,$2,$3) RETURNING id`,
@@ -306,7 +308,7 @@ async function generarRolColaborador(client, periodoId, periodo, col, pctAnticip
   );
   const rolId = rolRows[0].id;
 
-  await aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, sbu, new Map());
+  await aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, pctAnticipoExterno, sbu, new Map());
   await aplicarPrestamosPendientes(client, rolId, col.id, periodo.fecha_fin);
   await aplicarDescuentosPendientes(client, rolId, col.id, periodo.quincena, periodo.fecha_inicio);
 
@@ -319,7 +321,7 @@ async function generarRolColaborador(client, periodoId, periodo, col, pctAnticip
 // anterior al inicio: trabajó 0 días de esta quincena); si la salida cae a
 // mitad del período, entra con prorrateo hasta ese día.
 // La autorización se aplica en la capa de rutas (requireRole); este servicio es interno.
-export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }) {
+export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4, pctAnticipoExterno = 0.5 }) {
   // FOR UPDATE bloquea el período durante la generación (evita regeneración concurrente).
   const { rows: periodoRows } = await client.query('SELECT * FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
   if (periodoRows.length === 0) throw new Error('período no existe');
@@ -348,7 +350,7 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
 
   let creados = 0;
   for (const col of colaboradores) {
-    await generarRolColaborador(client, periodoId, periodo, col, pctAnticipo, sbu);
+    await generarRolColaborador(client, periodoId, periodo, col, pctAnticipo, pctAnticipoExterno, sbu);
     creados++;
   }
   return { creados };
@@ -360,8 +362,11 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4 }
 // nada si ya tiene un rol en ese período (evita duplicar por un aumento de
 // sueldo posterior).
 export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId) {
+  // Excluye los períodos padre (MES): nunca llevan roles_pago propios (solo
+  // agrupan sus quincenas hijas), y su columna quincena='AMBAS' no es un
+  // número de quincena válido para generarRolColaborador.
   const { rows: periodosBorrador } = await client.query(
-    `SELECT * FROM periodos WHERE estado='BORRADOR' ORDER BY fecha_inicio FOR UPDATE`
+    `SELECT * FROM periodos WHERE estado='BORRADOR' AND tipo_periodo='QUINCENA' ORDER BY fecha_inicio FOR UPDATE`
   );
   if (periodosBorrador.length === 0) return { agregados: 0 };
 
@@ -376,11 +381,12 @@ export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId)
   const col = colRows[0];
 
   const { rows: paramRows } = await client.query(
-    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO')`
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO','PORCENTAJE_ANTICIPO_EXTERNO')`
   );
   const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
   const sbu = Number(params.SBU ?? '460');
   const pctAnticipo = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+  const pctExterno = Number(params.PORCENTAJE_ANTICIPO_EXTERNO ?? '0.50');
 
   let agregados = 0;
   for (const periodo of periodosBorrador) {
@@ -392,7 +398,7 @@ export async function agregarColaboradorAPeriodosBorrador(client, colaboradorId)
     );
     if (existente.length > 0) continue;
     const colConVinc = { ...col, vinc_entrada: vinc.fecha_entrada, vinc_salida: vinc.fecha_salida };
-    await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, sbu);
+    await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, pctExterno, sbu);
     agregados++;
   }
   return { agregados };
@@ -411,22 +417,25 @@ export async function reconciliarColaboradorEnPeriodosBorrador(client, colaborad
   );
   if (col.length === 0) return;
   const c = col[0];
-  const grupo = grupoDeColaborador(c.tipo, c.clasificacion);
 
   const { rows: paramRows } = await client.query(
-    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO')`);
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO','PORCENTAJE_ANTICIPO_EXTERNO')`);
   const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
   const sbu = Number(params.SBU ?? '460');
   const pctAnticipo = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+  const pctExterno = Number(params.PORCENTAJE_ANTICIPO_EXTERNO ?? '0.50');
 
+  // Igual que en agregarColaboradorAPeriodosBorrador: los períodos padre
+  // (MES) no llevan roles_pago propios y su quincena='AMBAS' rompería los
+  // cálculos que esperan '1'/'2'.
   const { rows: periodos } = await client.query(
-    `SELECT * FROM periodos WHERE estado='BORRADOR' ORDER BY fecha_inicio FOR UPDATE`);
+    `SELECT * FROM periodos WHERE estado='BORRADOR' AND tipo_periodo='QUINCENA' ORDER BY fecha_inicio FOR UPDATE`);
 
   for (const periodo of periodos) {
     // No se toca un grupo ya aprobado (bloqueado) en este período.
     const { rows: ag } = await client.query(
-      `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
-      [periodo.id, c.empresa, grupo]);
+      `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND tipo=$3 AND clasificacion=$4`,
+      [periodo.id, c.empresa, c.tipo, c.clasificacion]);
     if (ag.length > 0) continue;
 
     const vinc = await vinculoQueCubre(client, colaboradorId, periodo.fecha_inicio, periodo.fecha_fin);
@@ -441,7 +450,7 @@ export async function reconciliarColaboradorEnPeriodosBorrador(client, colaborad
     if (c.sueldo_base == null) continue; // sin contrato vigente no hay rol que generar
     if (rolExistente.length === 0) {
       const colConVinc = { ...c, vinc_entrada: vinc.fecha_entrada, vinc_salida: vinc.fecha_salida };
-      await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, sbu);
+      await generarRolColaborador(client, periodo.id, periodo, colConVinc, pctAnticipo, pctExterno, sbu);
     } else {
       await aplicarSueldoPendiente(client, rolExistente[0].id, colaboradorId, periodo.quincena, periodo.fecha_inicio, periodo.fecha_fin);
       await recalcularTotales(client, rolExistente[0].id);
@@ -467,7 +476,7 @@ export async function sincronizarPeriodo(client, periodoId) {
        AND NOT EXISTS (
          SELECT 1 FROM aprobaciones_grupo ag
          WHERE ag.periodo_id = rp.periodo_id AND ag.empresa = c.empresa
-           AND ag.grupo = ${SQL_GRUPO}
+           AND ag.tipo = c.tipo AND ag.clasificacion = c.clasificacion
        )`,
     [periodoId]
   );
@@ -538,4 +547,211 @@ export async function transicionarPeriodo(client, periodoId, accion, usuarioId) 
   }
 
   return upd[0];
+}
+
+// ── Períodos mensuales ──────────────────────────────────────────────────────
+
+// Estado derivado del período padre: el MES nunca persiste su propio estado
+// (crearMes lo inserta en BORRADOR y nunca se actualiza); se computa como el
+// mínimo entre sus quincenas hijas. Acepta un array de estados (strings) o de
+// objetos con `.estado` (p.ej. filas de `periodos`), para poder usarlo tanto
+// en tests unitarios como directamente sobre los resultados de una query.
+export function estadoDerivadoMes(hijas) {
+  const estados = (hijas || []).map((h) => (typeof h === 'string' ? h : h?.estado));
+  if (estados.length === 0 || estados.some((e) => e === 'BORRADOR' || e == null)) return 'BORRADOR';
+  return estados.every((e) => e === 'CERRADO') ? 'CERRADO' : 'APROBADO';
+}
+
+export function pctAnticipoPorTipo(col, pctGlobal, pctExterno) {
+  if (col.pct_anticipo != null) return Number(col.pct_anticipo);
+  return col.tipo === 'EXTERNO' ? Number(pctExterno ?? 0.5) : pctGlobal;
+}
+
+// Crea un período mensual (padre) con sus dos quincenas hijas. Si una quincena
+// ya existe suelta, crea solo la faltante. Genera roles automáticamente en las
+// quincenas cuya fecha_inicio ya pasó o es el mes actual.
+export async function crearMes(client, { anio, mes, creado_por }) {
+  const mesStr = String(mes).padStart(2, '0');
+  const q1Inicio = `${anio}-${mesStr}-01`;
+  const q1Fin = `${anio}-${mesStr}-15`;
+  const q2Inicio = `${anio}-${mesStr}-16`;
+  const q2Fin = new Date(anio, mes, 0).toISOString().slice(0, 10); // último día del mes
+
+  // Validar que no exista ya un padre para este mes
+  const { rows: existente } = await client.query(
+    `SELECT id FROM periodos WHERE tipo_periodo='MES' AND quincena='AMBAS'
+     AND DATE_TRUNC('month', fecha_inicio) = $1::date`,
+    [`${anio}-${mesStr}-01`]
+  );
+  if (existente.length > 0) {
+    throw new Error(`el mes ${mes}/${anio} ya tiene período padre`);
+  }
+
+  const nombre = new Date(anio, mes - 1, 1).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' });
+  // Capitalizar primera letra
+  const nombreCapitalizado = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+
+  // Ver qué quincenas ya existen sueltas en este mes
+  const { rows: qExistente } = await client.query(
+    `SELECT quincena, id FROM periodos WHERE tipo_periodo='QUINCENA' AND quincena IN ('1','2')
+     AND DATE_TRUNC('month', fecha_inicio) = $1::date`,
+    [`${anio}-${mesStr}-01`]
+  );
+  const qExistenteMap = new Map(qExistente.map((r) => [r.quincena, r.id]));
+
+  const ahora = new Date();
+  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+
+  // Mismos parámetros globales que usa el POST /periodos suelto — sin esto,
+  // generarRoles recibe sbu=undefined y decimoCuarto(undefined) da NaN, que
+  // Postgres acepta como numeric y termina corrompiendo roles_pago.neto.
+  const { rows: paramRows } = await client.query(
+    `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO','PORCENTAJE_ANTICIPO_EXTERNO')`
+  );
+  const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));
+  const sbu = Number(params.SBU ?? '460');
+  const pctAnticipo = Number(params.PORCENTAJE_ANTICIPO ?? '0.40');
+  const pctAnticipoExterno = Number(params.PORCENTAJE_ANTICIPO_EXTERNO ?? '0.50');
+
+  // Crear padre
+  const { rows: padreRows } = await client.query(
+    `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por)
+     VALUES ($1,$2,$3,'AMBAS','MES','BORRADOR',$4) RETURNING *`,
+    [nombreCapitalizado, `${anio}-${mesStr}-01`, q2Fin, creado_por]
+  );
+  const padre = padreRows[0];
+
+  const quincenas = [];
+  let creados = 0;
+
+  for (const q of ['1', '2']) {
+    const qInicio = q === '1' ? q1Inicio : q2Inicio;
+    const qFin = q === '1' ? q1Fin : q2Fin;
+    const id = qExistenteMap.get(q);
+    if (id) {
+      // Vincular la quincena existente al nuevo padre
+      await client.query(
+        'UPDATE periodos SET mes_periodo_id=$1, tipo_periodo=$2 WHERE id=$3',
+        [padre.id, 'QUINCENA', id]
+      );
+      const { rows: qRows } = await client.query('SELECT * FROM periodos WHERE id=$1', [id]);
+      quincenas.push(qRows[0]);
+    } else {
+      const { rows: qRows } = await client.query(
+        `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por, mes_periodo_id)
+         VALUES ($1,$2,$3,$4,'QUINCENA','BORRADOR',$5,$6) RETURNING *`,
+        [`${nombreCapitalizado} Q${q}`, qInicio, qFin, q, creado_por, padre.id]
+      );
+      quincenas.push(qRows[0]);
+      creados++;
+
+      // Generar roles si la quincena ya debería haber comenzado
+      if (qInicio <= hoy) {
+        await generarRoles(client, qRows[0].id, { sbu, pctAnticipo, pctAnticipoExterno });
+      }
+    }
+  }
+
+  return { periodo_mes: padre, quincenas, creados };
+}
+
+// Agrupa quincenas sueltas existentes en meses padre. Backfill único para
+// migración. Idempotente: si el mes ya tiene padre, no lo duplica.
+export async function agruparPeriodosEnMeses(client) {
+  const { rows: grupos } = await client.query(
+    `SELECT DATE_TRUNC('month', fecha_inicio)::date AS mes_inicio,
+            MIN(fecha_inicio) AS q1_fecha, MAX(fecha_fin) AS q2_fecha,
+            COUNT(DISTINCT quincena) AS q_count,
+            ARRAY_AGG(id ORDER BY quincena) AS periodo_ids
+     FROM periodos
+     WHERE quincena IN ('1','2') AND tipo_periodo='QUINCENA' AND mes_periodo_id IS NULL
+     GROUP BY DATE_TRUNC('month', fecha_inicio)
+     HAVING COUNT(DISTINCT quincena) = 2`
+  );
+
+  let creados = 0;
+  for (const g of grupos) {
+    const nombre = new Date(g.mes_inicio).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' });
+    const nombreCapitalizado = nombre.charAt(0).toUpperCase() + nombre.slice(1);
+
+    const { rows: padreRows } = await client.query(
+      `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado)
+       VALUES ($1,$2,$3,'AMBAS','MES','BORRADOR') RETURNING id`,
+      [nombreCapitalizado, g.q1_fecha, g.q2_fecha]
+    );
+    const padreId = padreRows[0].id;
+
+    await client.query(
+      'UPDATE periodos SET mes_periodo_id=$1 WHERE id = ANY($2)',
+      [padreId, g.periodo_ids]
+    );
+    creados++;
+  }
+  return { creados };
+}
+
+// Aplica una transición en cascada: si el período es MES, itera sobre sus
+// hijas. Si es QUINCENA, actúa directamente.
+//
+// Idempotencia por hija: si una hija ya está en el estado destino de la
+// acción (p.ej. RRHH ya había aprobado manualmente la Q1 y luego usa el botón
+// "Aprobar mes"), se omite en vez de reintentar la transición — de lo
+// contrario siguienteEstado() lanzaría "Transición inválida" y, al mantener
+// la transacción atómica (BEGIN/COMMIT/ROLLBACK en la ruta), abortaría la
+// cascada completa por una hija que en realidad ya estaba bien. Si el estado
+// de la hija impide la acción por otra razón genuina (p.ej. cerrar sin haber
+// pasado por aprobar), el throw original de siguienteEstado sigue
+// propagando y aborta toda la cascada — eso sigue siendo un error real.
+export async function transicionarPeriodoCascada(client, periodoId, accion, usuarioId) {
+  const { rows } = await client.query('SELECT tipo_periodo FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
+  if (rows.length === 0) throw new Error('período no existe');
+  const destino = accion === 'aprobar' ? 'APROBADO' : accion === 'cerrar' ? 'CERRADO' : null;
+  if (rows[0].tipo_periodo === 'MES') {
+    const { rows: hijas } = await client.query(
+      'SELECT id, nombre, estado FROM periodos WHERE mes_periodo_id=$1 ORDER BY quincena',
+      [periodoId]
+    );
+    const resultados = [];
+    for (const h of hijas) {
+      if (destino && h.estado === destino) {
+        resultados.push({ id: h.id, nombre: h.nombre, nuevo_estado: h.estado, omitida: true });
+        continue;
+      }
+      const r = await transicionarPeriodo(client, h.id, accion, usuarioId);
+      resultados.push({ id: h.id, nombre: h.nombre, nuevo_estado: r.estado });
+    }
+    return { periodo_id: periodoId, tipo_periodo: 'MES', resultados };
+  }
+  const r = await transicionarPeriodo(client, periodoId, accion, usuarioId);
+  return { periodo_id: periodoId, tipo_periodo: 'QUINCENA', nuevo_estado: r.estado };
+}
+
+// Sincroniza en cascada: si es MES, itera hijas. Si es QUINCENA, directo.
+//
+// Mismo criterio de idempotencia por hija que transicionarPeriodoCascada:
+// sincronizarPeriodo() exige que el período esté en BORRADOR y lanza "no
+// editable" si no lo está. Sin este chequeo previo, una hija ya
+// aprobada/cerrada (p.ej. Q1 aprobada manualmente, Q2 aún en BORRADOR)
+// abortaría la sincronización de todo el mes, incluida la Q2 que sí era
+// sincronizable. Se omite (no hay nada que sincronizar en una hija bloqueada)
+// sin abortar la cascada.
+export async function sincronizarPeriodoCascada(client, periodoId) {
+  const { rows } = await client.query('SELECT tipo_periodo FROM periodos WHERE id=$1 FOR UPDATE', [periodoId]);
+  if (rows.length === 0) throw new Error('período no existe');
+  if (rows[0].tipo_periodo === 'MES') {
+    const { rows: hijas } = await client.query(
+      'SELECT id, nombre, estado FROM periodos WHERE mes_periodo_id=$1 ORDER BY quincena',
+      [periodoId]
+    );
+    const total = { roles: 0, agregadas: 0, actualizadas: 0, omitidas: 0 };
+    for (const h of hijas) {
+      if (h.estado !== 'BORRADOR') { total.omitidas++; continue; }
+      const r = await sincronizarPeriodo(client, h.id);
+      total.roles += r.roles;
+      total.agregadas += r.agregadas;
+      total.actualizadas += r.actualizadas;
+    }
+    return total;
+  }
+  return sincronizarPeriodo(client, periodoId);
 }

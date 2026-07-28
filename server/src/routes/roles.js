@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
-import { grupoDeColaborador } from '../lib/grupos.js';
+
 import { recalcularTotales } from '../services/roles.js';
 import { aplicarPrestamosPendientes, aplicarDescuentosPendientes, aplicarSueldoPendiente } from '../services/periodos.js';
 
@@ -45,12 +45,11 @@ async function puedeEditarRol(rolId) {
   if (rows.length === 0) return { ok: false, code: 404, error: 'rol no encontrado' };
   const r = rows[0];
   if (r.estado !== 'BORRADOR') return { ok: false, code: 409, error: `período ${r.estado}: no editable` };
-  const grupo = grupoDeColaborador(r.tipo, r.clasificacion);
   const { rows: ag } = await pool.query(
-    `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
-    [r.periodo_id, r.empresa, grupo]
+    `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND tipo=$3 AND clasificacion=$4`,
+    [r.periodo_id, r.empresa, r.tipo, r.clasificacion]
   );
-  if (ag.length > 0) return { ok: false, code: 409, error: 'grupo aprobado: no editable' };
+  if (ag.length > 0) return { ok: false, code: 409, error: 'combinación aprobada: no editable' };
   return { ok: true };
 }
 

@@ -80,7 +80,9 @@ describe('colaborador nuevo con período en BORRADOR', () => {
     const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
     const rolDetalle = await auth(request(app).get(`/api/roles/${rol.id}`));
     const anticipo = rolDetalle.body.lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA');
-    expect(Number(anticipo.monto)).toBe(400);
+    // Sueldo 1000, EXTERNO sin pct_anticipo propio usa el default de 50%
+    // (PORCENTAJE_ANTICIPO_EXTERNO) en vez del 40% global — sin prorrateo.
+    expect(Number(anticipo.monto)).toBe(500);
   });
 
   it('no duplica el rol si el colaborador ya tenía uno en ese período (aumento de sueldo)', async () => {

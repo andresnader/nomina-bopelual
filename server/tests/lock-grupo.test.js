@@ -31,12 +31,12 @@ describe('bloqueo de edición por grupo aprobado', () => {
       .send({ tipo_linea: 'BONO', clase: 'INGRESO', monto: 10 });
     expect(ok.status).toBe(201);
 
-    await auth(request(app).post(`/api/periodos/${p[0].id}/grupos/aprobar`))
-      .send({ empresa: 'BOPELUAL S.A.', grupo: 'COMERCIAL' });
+    await auth(request(app).post(`/api/periodos/${p[0].id}/combinaciones/aprobar`))
+      .send({ empresa: 'BOPELUAL S.A.', tipo: 'IESS', clasificacion: 'COMERCIAL' });
 
     const bloqueado = await auth(request(app).post(`/api/roles/${rol[0].id}/lineas`))
       .send({ tipo_linea: 'BONO', clase: 'INGRESO', monto: 5 });
     expect(bloqueado.status).toBe(409);
-    expect(bloqueado.body.error).toMatch(/grupo aprobado/);
+    expect(bloqueado.body.error).toMatch(/combinación aprobada/);
   });
 });

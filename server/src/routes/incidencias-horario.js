@@ -4,7 +4,7 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import { calcularIncidencia } from '../lib/incidencias-horario.js';
 import { puedeEditarLineas } from '../lib/periodo-fsm.js';
 import { recalcularTotales } from '../services/roles.js';
-import { grupoDeColaborador } from '../lib/grupos.js';
+
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -86,14 +86,13 @@ router.post('/:id/aplicar', async (req, res) => {
   if (!puedeEditarLineas(rolRows[0].estado)) {
     return res.status(409).json({ error: `período ${rolRows[0].estado}: no editable` });
   }
-  // El grupo del colaborador no debe estar aprobado (bloqueado) en el período.
-  const grupo = grupoDeColaborador(rolRows[0].tipo, rolRows[0].clasificacion);
+  // La combinación del colaborador no debe estar aprobada (bloqueada) en el período.
   const { rows: agRows } = await pool.query(
-    `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND grupo=$3`,
-    [rolRows[0].periodo_id, rolRows[0].empresa, grupo]
+    `SELECT 1 FROM aprobaciones_grupo WHERE periodo_id=$1 AND empresa=$2 AND tipo=$3 AND clasificacion=$4`,
+    [rolRows[0].periodo_id, rolRows[0].empresa, rolRows[0].tipo, rolRows[0].clasificacion]
   );
   if (agRows.length > 0) {
-    return res.status(409).json({ error: 'grupo aprobado: no editable' });
+    return res.status(409).json({ error: 'combinación aprobada: no editable' });
   }
 
   const client = await pool.connect();

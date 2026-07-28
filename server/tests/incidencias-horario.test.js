@@ -126,15 +126,15 @@ describe('incidencias de horario', () => {
     const det = await auth(request(app).get(`/api/periodos/${periodoId}`));
     const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
 
-    // aprobar el grupo del colaborador (BOPELUAL S.A. / ADM) bloquea su edición
-    await auth(request(app).post(`/api/periodos/${periodoId}/grupos/aprobar`))
-      .send({ empresa: 'BOPELUAL S.A.', grupo: 'ADM' });
+    // aprobar la combinación del colaborador (BOPELUAL S.A. / IESS / ADMINISTRATIVO) bloquea su edición
+    await auth(request(app).post(`/api/periodos/${periodoId}/combinaciones/aprobar`))
+      .send({ empresa: 'BOPELUAL S.A.', tipo: 'IESS', clasificacion: 'ADMINISTRATIVO' });
 
     const res = await auth(
       request(app).post(`/api/colaboradores/${col.id}/incidencias-horario/${incidencia.id}/aplicar`)
     ).send({ rol_pago_id: rol.id });
     expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/grupo aprobado/);
+    expect(res.body.error).toMatch(/combinación aprobada/);
   });
 
   it('DELETE elimina una incidencia pendiente; rechaza si ya fue aplicada', async () => {
