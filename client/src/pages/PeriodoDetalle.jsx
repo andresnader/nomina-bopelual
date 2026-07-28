@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Download, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { api } from '../api.js';
 import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
@@ -8,15 +8,11 @@ import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
+import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
+import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
 import { money } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
-const GRUPOS = [
-  { valor: '', label: 'Todos' },
-  { valor: 'ADM', label: 'Administrativo' },
-  { valor: 'COMERCIAL', label: 'Comercial' },
-  { valor: 'SERV_PROF', label: 'Serv. Profesionales' },
-];
 
 const TIPOS_PAGO = [
   { valor: 'TRANSFERENCIA', label: 'Transferencia' },
@@ -42,22 +38,10 @@ function base64ABlob(b64, tipo) {
 // Sección final del período: genera la vista de la nómina con la marca de
 // pago por TXT por colaborador, y las descargas del Excel (todos) y del TXT
 // del banco (solo marcados).
-function GenerarNomina({ periodoId, filas, empresa }) {
+function GenerarNomina({ periodoId, filas }) {
   const [generada, setGenerada] = useState(false);
   const [aviso, setAviso] = useState(null);
   const toast = useToast();
-
-  const descargarTxt = async (grupo) => {
-    setAviso(null);
-    const q = new URLSearchParams();
-    if (empresa) q.set('empresa', empresa);
-    if (grupo) q.set('grupo', grupo);
-    const r = await api.get(`/periodos/${periodoId}/txt-pago${q.size ? `?${q}` : ''}`);
-    if (r.incluidos > 0) {
-      descargarBlob(r.archivo, new Blob([r.contenido], { type: 'text/plain' }));
-    }
-    setAviso(r);
-  };
 
   const descargarExcel = async () => {
     setAviso(null);
@@ -157,79 +141,12 @@ function GenerarNomina({ periodoId, filas, empresa }) {
       </div>
 
       <div className="mt-4 pt-4 border-t border-dashed border-slate-200">
-        <h3 className="font-semibold text-sm">TXT de pago — Banco Pichincha</h3>
+        <h3 className="font-semibold text-sm mb-1">TXT de pago — Banco Pichincha</h3>
         <p className="text-sm text-muted mb-3">Solo incluye a los marcados en "Pagar TXT" (Cash Management para transferencias masivas)</p>
-        <div className="flex flex-wrap gap-2">
-          {GRUPOS.map((g) => (
-            <button key={g.valor} onClick={() => descargarTxt(g.valor).catch((e) => setAviso({ error: e.message }))}
-              className="btn btn-secondary">
-              <Download size={15} /> {g.label}
-            </button>
-          ))}
-        </div>
+        <ExportarTxtMatriz periodoId={periodoId} />
       </div>
 
       {aviso?.error && <p className="text-sm text-red-600 mt-3">{aviso.error}</p>}
-      {aviso && !aviso.error && (
-        <div className="text-sm mt-3 space-y-1">
-          <p className="text-muted">
-            {aviso.incluidos > 0
-              ? <>Archivo <span className="font-medium">{aviso.archivo}</span>: {aviso.incluidos} transferencias por {money(aviso.total)}.</>
-              : 'Ninguna transferencia con ese filtro.'}
-          </p>
-          {aviso.excluidos?.length > 0 && (
-            <p className="text-amber-600">
-              Excluidos ({aviso.excluidos.length}): {aviso.excluidos.map((e) => `${e.nombre} (${e.motivo})`).join(', ')} — pagar por otro medio o completar su ficha.
-            </p>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// Tarjeta de aprobación por grupo (empresa × grupo). Cada grupo se aprueba y
-// bloquea de edición por separado mientras el período está en BORRADOR.
-function GruposPeriodo({ periodoId, grupos, onCambio }) {
-  const toast = useToast();
-  const accion = async (ruta, empresa, grupo) => {
-    try {
-      await api.post(`/periodos/${periodoId}/grupos/${ruta}`, { empresa, grupo });
-      onCambio();
-    } catch (e) { toast.error(e.message); }
-  };
-  if (!grupos?.length) return null;
-  return (
-    <Card className="mb-4">
-      <h2 className="font-semibold">Grupos del período</h2>
-      <p className="text-sm text-muted mb-3">Aprueba y bloquea cada grupo por separado. Al aprobar, sus roles quedan bloqueados de edición.</p>
-      <div className="overflow-x-auto -mx-4 md:mx-0">
-        <table className="w-full text-sm">
-          <thead className="text-slate-500 text-left">
-            <tr className="border-b border-slate-200">
-              <th className="p-3">Empresa</th><th className="p-3">Grupo</th>
-              <th className="p-3 text-right">Colaboradores</th><th className="p-3 text-right">Neto</th>
-              <th className="p-3">Estado</th><th className="p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {grupos.map((g) => (
-              <tr key={`${g.empresa}-${g.grupo}`} className="border-b border-slate-200">
-                <td className="p-3">{g.empresa}</td>
-                <td className="p-3">{g.etiqueta}</td>
-                <td className="p-3 text-right">{g.colaboradores}</td>
-                <td className="p-3 text-right">{money(g.total_neto)}</td>
-                <td className="p-3"><Badge estado={g.aprobado ? 'APROBADO' : 'PENDIENTE'} /></td>
-                <td className="p-3 text-right">
-                  {g.aprobado
-                    ? <button onClick={() => accion('reabrir', g.empresa, g.grupo)} className="btn btn-secondary">Reabrir</button>
-                    : <button onClick={() => accion('aprobar', g.empresa, g.grupo)} className="btn btn-primary">Aprobar grupo</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </Card>
   );
 }
@@ -237,6 +154,7 @@ function GruposPeriodo({ periodoId, grupos, onCambio }) {
 export default function PeriodoDetalle() {
   const { id } = useParams();
   const [periodo, setPeriodo] = useState(null);
+  const [padreNombre, setPadreNombre] = useState(null);
   const [error, setError] = useState(null);
   const [empresa, setEmpresa] = useState('');
   const toast = useToast();
@@ -245,6 +163,15 @@ export default function PeriodoDetalle() {
   useEffect(() => {
     cargar();
   }, [id]);
+
+  // Breadcrumb: si esta quincena pertenece a un período mensual, mostramos
+  // la ruta padre en vez del "Volver a Períodos" genérico.
+  useEffect(() => {
+    setPadreNombre(null);
+    if (periodo?.mes_periodo_id) {
+      api.get(`/periodos/${periodo.mes_periodo_id}`).then((p) => setPadreNombre(p.nombre)).catch(() => {});
+    }
+  }, [periodo?.mes_periodo_id]);
 
   const accion = async (nombre) => {
     setError(null);
@@ -291,7 +218,10 @@ export default function PeriodoDetalle() {
   return (
     <div>
       <PageTitle
-        volver={{ to: '/periodos', label: 'Volver a Períodos' }}
+        volver={{
+          to: '/periodos',
+          label: padreNombre ? `${padreNombre} › Quincena ${periodo.quincena}` : 'Volver a Períodos',
+        }}
         accion={
           <div className="flex gap-2">
             {periodo.estado === 'BORRADOR' && (
@@ -334,9 +264,13 @@ export default function PeriodoDetalle() {
         </div>
       </Card>
 
-      {periodo.estado === 'BORRADOR' && (
+      {periodo.estado === 'BORRADOR' && periodo.grupos?.length > 0 && (
         <RoleGate roles={['ADMIN', 'RRHH']}>
-          <GruposPeriodo periodoId={id} grupos={periodo.grupos} onCambio={cargar} />
+          <Card className="mb-4">
+            <h2 className="font-semibold">Aprobación por combinación</h2>
+            <p className="text-sm text-muted mb-3">Aprueba y bloquea cada combinación por separado. Al aprobar, sus roles quedan bloqueados de edición.</p>
+            <AprobacionMatriz periodos={[{ id, label: null, grupos: periodo.grupos }]} onCambio={cargar} />
+          </Card>
         </RoleGate>
       )}
 
@@ -414,7 +348,7 @@ export default function PeriodoDetalle() {
       </Card>
 
       <RoleGate roles={['ADMIN', 'RRHH']}>
-        <GenerarNomina periodoId={id} filas={filas} empresa={empresa} />
+        <GenerarNomina periodoId={id} filas={filas} />
       </RoleGate>
     </div>
   );
