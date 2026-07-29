@@ -12,7 +12,7 @@ import { useConfirm } from '../components/Modal.jsx';
 import NuevoMesModal from '../components/NuevoMesModal.jsx';
 import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
-import { money, fecha } from '../utils.js';
+import { money, fecha, descargarBlob, base64ABlob } from '../utils.js';
 
 const VACIO = { nombre: '', fecha_inicio: '', fecha_fin: '', quincena: 1 };
 
@@ -41,6 +41,19 @@ function MesCard({ mes, onCambio }) {
     const siguiente = seccion === nombre ? null : nombre;
     setSeccion(siguiente);
     if (siguiente === 'aprobacion' && !hijasDetalle) cargarHijasDetalle();
+  };
+
+  // Excel de una quincena puntual (Q1 o Q2): incluye TODA la nómina de esa
+  // quincena, aprobada o no — mismo endpoint y comportamiento que el botón
+  // "Guardar en Excel" de PeriodoDetalle.jsx.
+  const descargarExcelQuincena = async (quincenaId) => {
+    try {
+      const r = await api.get(`/periodos/${quincenaId}/excel`);
+      descargarBlob(r.archivo, base64ABlob(r.contenidoBase64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+      toast.success(`Excel ${r.archivo}: ${r.incluidos} colaboradores por ${money(r.total)}.`);
+    } catch (e) {
+      toast.error(e.message);
+    }
   };
 
   const accionCascada = async (accion, etiqueta) => {
@@ -81,15 +94,21 @@ function MesCard({ mes, onCambio }) {
 
       <div className="grid sm:grid-cols-2 gap-3 mb-3">
         {mes.hijas.map((h) => (
-          <Link key={h.id} to={`/periodos/${h.id}`}
-            className="block p-3 rounded-lg border border-slate-200 hover:border-gold-300 hover:bg-slate-50 transition-colors">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium">Quincena {h.quincena}</span>
-              <Badge estado={h.estado} />
-            </div>
-            <p className="text-xs text-muted">{fecha(h.fecha_inicio)} – {fecha(h.fecha_fin)}</p>
-            <p className="text-sm font-semibold text-slate-700 mt-1">{money(h.total_neto)}</p>
-          </Link>
+          <div key={h.id} className="p-3 rounded-lg border border-slate-200 hover:border-gold-300 transition-colors">
+            <Link to={`/periodos/${h.id}`} className="block hover:bg-slate-50 -m-3 p-3 mb-0 rounded-t-lg">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium">Quincena {h.quincena}</span>
+                <Badge estado={h.estado} />
+              </div>
+              <p className="text-xs text-muted">{fecha(h.fecha_inicio)} – {fecha(h.fecha_fin)}</p>
+              <p className="text-sm font-semibold text-slate-700 mt-1">{money(h.total_neto)}</p>
+            </Link>
+            <RoleGate roles={['ADMIN', 'RRHH']}>
+              <button onClick={() => descargarExcelQuincena(h.id)} className="btn btn-secondary text-xs mt-2 w-full justify-center">
+                <FileSpreadsheet size={13} /> Excel Q{h.quincena}
+              </button>
+            </RoleGate>
+          </div>
         ))}
       </div>
 

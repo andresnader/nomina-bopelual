@@ -10,7 +10,7 @@ import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
-import { money } from '../utils.js';
+import { money, descargarBlob, base64ABlob } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
 
@@ -20,20 +20,6 @@ const TIPOS_PAGO = [
   { valor: 'PENDIENTE', label: 'Pendiente' },
 ];
 const labelTipoPago = (v) => TIPOS_PAGO.find((t) => t.valor === v)?.label ?? v;
-
-function descargarBlob(nombre, blob) {
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function base64ABlob(b64, tipo) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new Blob([bytes], { type: tipo });
-}
 
 // Sección final del período: genera la vista de la nómina con la marca de
 // pago por TXT por colaborador, y las descargas del Excel (todos) y del TXT
