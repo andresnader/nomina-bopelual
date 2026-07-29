@@ -593,11 +593,31 @@ export async function crearMes(client, { anio, mes, creado_por }) {
 
   // Ver qué quincenas ya existen sueltas en este mes
   const { rows: qExistente } = await client.query(
-    `SELECT quincena, id FROM periodos WHERE tipo_periodo='QUINCENA' AND quincena IN ('1','2')
+    `SELECT quincena, id, to_char(fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
+            to_char(fecha_fin,'YYYY-MM-DD') AS fecha_fin
+     FROM periodos WHERE tipo_periodo='QUINCENA' AND quincena IN ('1','2')
      AND DATE_TRUNC('month', fecha_inicio) = $1::date`,
     [`${anio}-${mesStr}-01`]
   );
-  const qExistenteMap = new Map(qExistente.map((r) => [r.quincena, r.id]));
+  const qExistenteMap = new Map(qExistente.map((r) => [r.quincena, r]));
+
+  // Si ya existe una quincena suelta para este mes, sus fechas deben coincidir
+  // exactamente con el rango esperado (1-15 / 16-fin de mes) antes de
+  // adoptarla — si no, quedaría enlazada al padre tal cual, con un dato mal
+  // cargado (p. ej. arrancando un día antes/después), solapándose con su
+  // hermana. Corregir el error a mano es responsabilidad de quien lo cargó,
+  // no de este wizard.
+  for (const q of ['1', '2']) {
+    const esperadoInicio = q === '1' ? q1Inicio : q2Inicio;
+    const esperadoFin = q === '1' ? q1Fin : q2Fin;
+    const existente = qExistenteMap.get(q);
+    if (existente && (existente.fecha_inicio !== esperadoInicio || existente.fecha_fin !== esperadoFin)) {
+      throw new Error(
+        `la quincena ${q} de ${mes}/${anio} ya existe (${existente.fecha_inicio} a ${existente.fecha_fin}) `
+        + `pero no coincide con el rango esperado (${esperadoInicio} a ${esperadoFin}) — corregí sus fechas antes de crear el mes`
+      );
+    }
+  }
 
   const ahora = new Date();
   const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
@@ -627,7 +647,7 @@ export async function crearMes(client, { anio, mes, creado_por }) {
   for (const q of ['1', '2']) {
     const qInicio = q === '1' ? q1Inicio : q2Inicio;
     const qFin = q === '1' ? q1Fin : q2Fin;
-    const id = qExistenteMap.get(q);
+    const id = qExistenteMap.get(q)?.id;
     if (id) {
       // Vincular la quincena existente al nuevo padre
       await client.query(

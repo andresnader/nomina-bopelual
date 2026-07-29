@@ -66,6 +66,24 @@ describe('API períodos mensuales (wizard + cascada + estado derivado)', () => {
     expect(Number(decimoCuarto.monto)).toBeCloseTo(38.33, 2);
   });
 
+  it('no adopta una quincena suelta con fechas que no coinciden con el rango esperado (409, sin crear nada)', async () => {
+    const app = createApp();
+    // Q2 cargada con un día de diferencia (empieza el 15, debería ser el 16) —
+    // el mismo patrón de dato mal cargado que causó el incidente de producción.
+    const q2MalFechada = await auth(request(app).post('/api/periodos')).send({
+      nombre: 'Q2 mal fechada', fecha_inicio: '2022-10-15', fecha_fin: '2022-10-31', quincena: 2
+    });
+    expect(q2MalFechada.status).toBe(201);
+
+    const res = await auth(request(app).post('/api/periodos/desde-mes')).send({ anio: 2022, mes: 10 });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/no coincide con el rango esperado/);
+
+    // No debe haber quedado ningún período padre para ese mes (rollback completo).
+    const lista = await auth(request(app).get('/api/periodos/mes'));
+    expect(lista.body.meses.find((m) => m.nombre.includes('Octubre'))).toBeUndefined();
+  });
+
   it('no permite crear el mismo mes dos veces (409)', async () => {
     const app = createApp();
     const primero = await auth(request(app).post('/api/periodos/desde-mes')).send({ anio: 2022, mes: 4 });

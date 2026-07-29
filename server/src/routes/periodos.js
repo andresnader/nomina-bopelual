@@ -51,7 +51,8 @@ router.post('/desde-mes', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     res.status(201).json(resultado);
   } catch (e) {
     await client.query('ROLLBACK');
-    const code = e.message.includes('ya tiene período padre') ? 409 : 500;
+    const code = e.message.includes('ya tiene período padre') || e.message.includes('no coincide con el rango esperado')
+      ? 409 : 500;
     res.status(code).json({ error: e.message });
   } finally {
     client.release();
