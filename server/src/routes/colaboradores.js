@@ -71,12 +71,21 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
       [tipo, cedula, nombre.toUpperCase(), email, departamento, cargo, fecha_ingreso ?? null, fecha_salida ?? null, clasificacion || null]
     );
     // Vínculo de empresa inicial (fuente de verdad de las fechas de la nómina).
+    const hoy = new Date().toISOString().slice(0, 10);
     await crearVinculo(client, rows[0].id, {
-      fecha_entrada: fecha_ingreso ?? new Date().toISOString().slice(0, 10),
+      fecha_entrada: fecha_ingreso ?? hoy,
       fecha_salida: fecha_salida ?? null,
     });
     await client.query('COMMIT');
-    res.status(201).json(rows[0]);
+    // Sin fecha de ingreso el vínculo arranca hoy, y generarRoles solo incluye
+    // a quien tenga fecha_entrada <= fecha_fin del período: el colaborador
+    // queda fuera de toda quincena ya transcurrida, sin señal visible. Se
+    // conserva el default (no romper cargas existentes) pero se avisa.
+    const advertencias = fecha_ingreso ? [] : [
+      `Se asumió ${hoy} como fecha de ingreso. No entrará en quincenas anteriores a esa fecha; ` +
+      `corrígela en su ficha si ingresó antes.`
+    ];
+    res.status(201).json({ ...rows[0], advertencias });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(400).json({ error: e.message });

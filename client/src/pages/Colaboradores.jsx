@@ -78,9 +78,10 @@ export default function Colaboradores() {
   const guardar = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/colaboradores', { ...form, fecha_ingreso: form.fecha_ingreso || null });
+      const creado = await api.post('/colaboradores', { ...form, fecha_ingreso: form.fecha_ingreso || null });
       setForm(null);
       toast.success('Colaborador creado.');
+      (creado?.advertencias ?? []).forEach((a) => toast.warning(a));
       cargar();
     } catch (err) {
       setError(err.message);

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 const ToastContext = createContext(null);
 let idSeq = 0;
@@ -8,7 +8,13 @@ const ESTILOS = {
   success: { icon: CheckCircle2, clase: 'bg-emerald-50 border-emerald-200 text-emerald-800' },
   error: { icon: XCircle, clase: 'bg-red-50 border-red-200 text-red-800' },
   info: { icon: Info, clase: 'bg-slate-50 border-slate-200 text-slate-800' },
+  warning: { icon: AlertTriangle, clase: 'bg-amber-50 border-amber-200 text-amber-900' },
 };
+
+// Las advertencias no se autocierran: avisan de algo que saldrá mal más tarde
+// (p. ej. un colaborador que quedará fuera de una quincena), y a los 4 segundos
+// nadie ha terminado de leerlas.
+const PERSISTENTES = new Set(['warning']);
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -20,13 +26,14 @@ export function ToastProvider({ children }) {
   const mostrar = useCallback((tipo, mensaje) => {
     const id = ++idSeq;
     setToasts((t) => [...t, { id, tipo, mensaje }]);
-    setTimeout(() => quitar(id), 4000);
+    if (!PERSISTENTES.has(tipo)) setTimeout(() => quitar(id), 4000);
   }, [quitar]);
 
   const api = {
     success: (m) => mostrar('success', m),
     error: (m) => mostrar('error', m),
     info: (m) => mostrar('info', m),
+    warning: (m) => mostrar('warning', m),
   };
 
   return (
