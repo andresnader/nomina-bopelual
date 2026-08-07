@@ -10,7 +10,7 @@ import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
-import { money, descargarBlob, base64ABlob } from '../utils.js';
+import { money, descargarBlob, base64ABlob, totalesPorEmpresa } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
 
@@ -200,6 +200,11 @@ export default function PeriodoDetalle() {
   if (!periodo) return <Card>{error || 'Cargando…'}</Card>;
 
   const filas = periodo.roles_pago.filter((r) => !empresa || r.colaborador_empresa === empresa);
+  // El pie resume lo que se está viendo (semántica de pie de tabla). Con una
+  // sola empresa en vista la fila TOTAL repetiría la de la empresa, así que
+  // solo aparece cuando hay más de una que sumar.
+  const totales = totalesPorEmpresa(filas);
+  const netoTotal = Math.round(totales.reduce((s, t) => s + t.neto, 0) * 100) / 100;
 
   return (
     <div>
@@ -300,6 +305,30 @@ export default function PeriodoDetalle() {
               </tr>
             )}
           </tbody>
+          {totales.length > 0 && (
+            <tfoot className="bg-slate-50">
+              {totales.map((t) => (
+                <tr key={t.empresa} className="border-t border-slate-200">
+                  <td colSpan={3} className="p-3 font-medium">{t.empresa}</td>
+                  <td colSpan={2} className="p-3 text-right text-muted">
+                    {t.cantidad} colaborador{t.cantidad !== 1 ? 'es' : ''}
+                  </td>
+                  <td className="p-3 text-right font-semibold">{money(t.neto)}</td>
+                  <td />
+                </tr>
+              ))}
+              {totales.length > 1 && (
+                <tr className="border-t-2 border-slate-300">
+                  <td colSpan={3} className="p-3 font-semibold">Total</td>
+                  <td colSpan={2} className="p-3 text-right text-muted">
+                    {filas.length} colaboradores
+                  </td>
+                  <td className="p-3 text-right font-bold">{money(netoTotal)}</td>
+                  <td />
+                </tr>
+              )}
+            </tfoot>
+          )}
         </table>
 
         <div className="md:hidden space-y-2 p-2">
@@ -330,6 +359,25 @@ export default function PeriodoDetalle() {
               }
             />
           ))}
+
+          {totales.length > 0 && (
+            <div className="border-t border-slate-200 mt-3 pt-3 px-2 space-y-1.5 text-sm">
+              {totales.map((t) => (
+                <div key={t.empresa} className="flex items-center justify-between gap-2">
+                  <span>
+                    {t.empresa} <span className="text-muted">· {t.cantidad}</span>
+                  </span>
+                  <span className="font-semibold">{money(t.neto)}</span>
+                </div>
+              ))}
+              {totales.length > 1 && (
+                <div className="flex items-center justify-between gap-2 border-t border-slate-300 pt-1.5">
+                  <span className="font-semibold">Total <span className="text-muted font-normal">· {filas.length}</span></span>
+                  <span className="font-bold">{money(netoTotal)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 

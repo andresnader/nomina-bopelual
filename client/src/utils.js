@@ -13,6 +13,24 @@ export const fecha = (d) => {
   return new Date(y, m - 1, dd).toLocaleDateString('es-EC');
 };
 
+// Agrupa roles de pago por empresa y suma su neto, para el pie de la tabla del
+// período. `neto` llega como string desde Postgres (numeric), y acumular floats
+// de dos decimales arrastra error binario (0.1+0.2 = 0.30000000000000004), así
+// que se redondea una sola vez al cerrar cada grupo.
+export function totalesPorEmpresa(filas) {
+  const porEmpresa = new Map();
+  for (const f of filas) {
+    const empresa = f.colaborador_empresa || 'Sin empresa';
+    const acc = porEmpresa.get(empresa) ?? { empresa, cantidad: 0, neto: 0 };
+    acc.cantidad += 1;
+    acc.neto += Number(f.neto || 0);
+    porEmpresa.set(empresa, acc);
+  }
+  return [...porEmpresa.values()]
+    .map((g) => ({ ...g, neto: Math.round(g.neto * 100) / 100 }))
+    .sort((a, b) => a.empresa.localeCompare(b.empresa, 'es'));
+}
+
 export function descargarBlob(nombre, blob) {
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
