@@ -19,10 +19,14 @@ describe('advertencia al crear colaborador sin fecha de ingreso', () => {
       ON CONFLICT (email) DO UPDATE SET activo=true, rol='RRHH'`);
   });
 
+  // El alta puede devolver más de una advertencia (p. ej. también avisa si no
+  // trae sueldo), así que estos tests miran la advertencia de fecha en
+  // particular en vez del total. El sueldo va cargado para aislar el caso.
   it('advierte que se asumió hoy cuando no se envía fecha_ingreso', async () => {
     const app = createApp();
     const res = await auth(request(app).post('/api/colaboradores')).send({
-      tipo: 'IESS', nombre: `Sin Fecha ${Date.now()}`, cedula: `SF${Date.now() % 1e8}`
+      tipo: 'IESS', nombre: `Sin Fecha ${Date.now()}`, cedula: `SF${Date.now() % 1e8}`,
+      sueldo_base: 900
     });
 
     expect(res.status).toBe(201);
@@ -33,7 +37,7 @@ describe('advertencia al crear colaborador sin fecha de ingreso', () => {
     expect(res.body.id).toBeTruthy();
   });
 
-  it('no advierte nada cuando sí se envía fecha_ingreso', async () => {
+  it('no advierte fecha asumida cuando sí se envía fecha_ingreso', async () => {
     const app = createApp();
     const res = await auth(request(app).post('/api/colaboradores')).send({
       tipo: 'IESS', nombre: `Con Fecha ${Date.now()}`, cedula: `CF${Date.now() % 1e8}`,
@@ -41,6 +45,6 @@ describe('advertencia al crear colaborador sin fecha de ingreso', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.advertencias ?? []).toHaveLength(0);
+    expect((res.body.advertencias ?? []).some((a) => /Se asumió/.test(a))).toBe(false);
   });
 });

@@ -57,10 +57,20 @@ router.get('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
 });
 
 router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, fecha_salida, clasificacion } = req.body;
+  const { tipo, cedula, nombre, email, departamento, cargo, fecha_ingreso, fecha_salida, clasificacion,
+    sueldo_base, bono } = req.body;
   if (!tipo || !nombre) return res.status(400).json({ error: 'tipo y nombre requeridos' });
   if (clasificacion && !['COMERCIAL', 'ADMINISTRATIVO'].includes(clasificacion)) {
     return res.status(400).json({ error: `clasificacion inválida: ${clasificacion}` });
+  }
+  // El sueldo es opcional, pero si viene tiene que ser un número: un texto
+  // llegaría hasta el INSERT y reventaría a mitad de la transacción.
+  const traeSueldo = sueldo_base !== undefined && sueldo_base !== null && sueldo_base !== '';
+  if (traeSueldo && !Number.isFinite(Number(sueldo_base))) {
+    return res.status(400).json({ error: `sueldo_base inválido: ${sueldo_base}` });
+  }
+  if (bono !== undefined && bono !== null && bono !== '' && !Number.isFinite(Number(bono))) {
+    return res.status(400).json({ error: `bono inválido: ${bono}` });
   }
   const client = await pool.connect();
   try {
@@ -76,15 +86,36 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
       fecha_entrada: fecha_ingreso ?? hoy,
       fecha_salida: fecha_salida ?? null,
     });
+    // El sueldo vive en `contratos`, y generarRoles exige uno vigente
+    // (fecha_fin IS NULL) para que el colaborador entre al período. Crearlo
+    // acá evita el segundo paso manual por la ficha, que era donde se perdía.
+    if (traeSueldo) {
+      await client.query(
+        `INSERT INTO contratos (colaborador_id, sueldo_base, fecha_inicio, bono)
+         VALUES ($1,$2,$3,$4)`,
+        [rows[0].id, Number(sueldo_base), fecha_ingreso ?? hoy, Number(bono ?? 0)]
+      );
+    }
     await client.query('COMMIT');
     // Sin fecha de ingreso el vínculo arranca hoy, y generarRoles solo incluye
     // a quien tenga fecha_entrada <= fecha_fin del período: el colaborador
     // queda fuera de toda quincena ya transcurrida, sin señal visible. Se
     // conserva el default (no romper cargas existentes) pero se avisa.
-    const advertencias = fecha_ingreso ? [] : [
-      `Se asumió ${hoy} como fecha de ingreso. No entrará en quincenas anteriores a esa fecha; ` +
-      `corrígela en su ficha si ingresó antes.`
-    ];
+    const advertencias = [];
+    if (!fecha_ingreso) {
+      advertencias.push(
+        `Se asumió ${hoy} como fecha de ingreso. No entrará en quincenas anteriores a esa fecha; ` +
+        `corrígela en su ficha si ingresó antes.`
+      );
+    }
+    // Mismo criterio para el sueldo: sin contrato vigente no entra a NINGUNA
+    // quincena (generarRoles lo descarta con un JOIN interno, sin dejar rastro).
+    if (!traeSueldo) {
+      advertencias.push(
+        `Sin sueldo cargado no entrará en ninguna quincena. Agregale un contrato ` +
+        `desde su ficha, pestaña Contratos.`
+      );
+    }
     res.status(201).json({ ...rows[0], advertencias });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -166,13 +197,18 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   // fecha_ingreso/fecha_salida NO se escriben directo: son columnas derivadas
   // que gobiernan los vínculos de empresa (se sincronizan aparte).
   const campos = [
-    'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula',
+    'nombre', 'email', 'departamento', 'cargo', 'activo', 'cedula', 'tipo',
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago', 'clasificacion',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
     'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal'
   ];
   if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
+  // `tipo` decide el porcentaje de la quincena, si se prorratea y si le tocan
+  // las líneas de ley: un valor fuera del catálogo rompería todo el cálculo.
+  if ('tipo' in req.body && !['IESS', 'EXTERNO'].includes(req.body.tipo)) {
+    return res.status(400).json({ error: `tipo inválido: ${req.body.tipo}` });
+  }
   const tocaFechas = ['fecha_ingreso', 'fecha_salida'].some((c) => c in req.body);
   const set = [], params = [];
   for (const c of campos) {
@@ -192,6 +228,11 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     }
     if (tocaFechas) {
       await sincronizarFechasDerivadas(client, req.params.id);
+    }
+    // `tipo` y `pct_anticipo` cambian el monto de las líneas igual que las
+    // fechas: sin reconciliar, la ficha muestra el valor nuevo y la quincena
+    // en BORRADOR se queda con el cálculo viejo.
+    if (tocaFechas || 'tipo' in req.body || 'pct_anticipo' in req.body) {
       await reconciliarColaboradorEnPeriodosBorrador(client, req.params.id);
     }
     const { rows } = await client.query('SELECT * FROM colaboradores WHERE id=$1', [req.params.id]);
@@ -316,12 +357,30 @@ router.patch('/:colaboradorId/contratos/:contratoId', requireRole(['ADMIN', 'RRH
     return res.status(400).json({ error: `tipo_contrato desconocido: ${req.body.tipo_contrato}` });
   }
   params.push(req.params.contratoId, req.params.colaboradorId);
-  const { rows } = await pool.query(
-    `UPDATE contratos SET ${set.join(', ')} WHERE id=$${params.length - 1} AND colaborador_id=$${params.length} RETURNING *`,
-    params
-  );
-  if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
-  res.json(rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `UPDATE contratos SET ${set.join(', ')} WHERE id=$${params.length - 1} AND colaborador_id=$${params.length} RETURNING *`,
+      params
+    );
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'no encontrado' });
+    }
+    // Corregir el sueldo tiene que llegar a las quincenas en BORRADOR ya
+    // generadas; si no, la ficha muestra el valor nuevo y el rol sigue con el
+    // viejo, y hay que reescribir cada rol a mano. Crear un contrato y editar
+    // la ficha del colaborador ya reconciliaban: esto faltaba.
+    await reconciliarColaboradorEnPeriodosBorrador(client, req.params.colaboradorId);
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 // ── Rubros de Ingreso Proyectados ──────────────────────────────────

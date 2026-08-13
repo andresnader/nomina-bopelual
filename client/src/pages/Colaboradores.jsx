@@ -9,7 +9,7 @@ import PageTitle from '../components/PageTitle.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { fecha } from '../utils.js';
 
-const VACIO = { tipo: 'IESS', nombre: '', cedula: '', email: '', departamento: '', cargo: '', fecha_ingreso: '', clasificacion: 'ADMINISTRATIVO' };
+const VACIO = { tipo: 'IESS', nombre: '', cedula: '', email: '', departamento: '', cargo: '', fecha_ingreso: '', clasificacion: 'ADMINISTRATIVO', sueldo_base: '', bono: '' };
 const POR_PAGINA = [10, 25, 50, { label: 'Todos', value: 'all' }];
 const COLUMNAS = [
   { key: 'nombre', label: 'Nombre' },
@@ -141,6 +141,15 @@ export default function Colaboradores() {
             </select>
             <input type="date" value={form.fecha_ingreso}
               onChange={(e) => setForm({ ...form, fecha_ingreso: e.target.value })}
+              className="input w-full" />
+            {/* Sueldo y bono crean el contrato vigente del colaborador. Son
+                opcionales, pero sin contrato no entra a ninguna quincena: si
+                se dejan vacíos, el servidor devuelve una advertencia. */}
+            <input type="number" step="0.01" min="0" placeholder="Sueldo base" value={form.sueldo_base}
+              onChange={(e) => setForm({ ...form, sueldo_base: e.target.value })}
+              className="input w-full" />
+            <input type="number" step="0.01" min="0" placeholder="Bono mensual (opcional)" value={form.bono}
+              onChange={(e) => setForm({ ...form, bono: e.target.value })}
               className="input w-full" />
             <div className="flex gap-2 md:col-span-2">
               <button className="bg-gold-400 hover:bg-gold-500 text-brand-900 font-semibold px-4 py-2 rounded-lg text-sm">
