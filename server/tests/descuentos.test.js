@@ -13,6 +13,9 @@ async function crearColaborador(app, extra = {}) {
     tipo: 'IESS',
     nombre: `Descuentos test ${Date.now()}`,
     cedula: `D${Date.now() % 1e9}`,
+    // Vínculo en el pasado por defecto: sin fecha_ingreso arranca hoy y el
+    // colaborador no entra a los períodos con fecha fija de estos tests.
+    fecha_ingreso: '2020-01-01',
     ...extra,
   });
   await auth(request(app).post(`/api/colaboradores/${res.body.id}/contratos`)).send({
@@ -83,11 +86,11 @@ describe('descuentos recurrentes', () => {
         colaborador_id: col.id, tipo_linea: 'ALIMENTACION', monto: 15, aplicar_en: 0
       })
     ).body;
-    await pool.query('UPDATE descuentos_recurrentes SET fecha_vencimiento=$1 WHERE id=$2', ['2026-08-01', desc.id]);
+    await pool.query('UPDATE descuentos_recurrentes SET fecha_vencimiento=$1 WHERE id=$2', ['2021-08-01', desc.id]);
 
     const per = await auth(request(app).post('/api/periodos')).send({
       nombre: `vencido test ${Date.now()}`,
-      fecha_inicio: '2026-09-16', fecha_fin: '2026-09-30', quincena: 2
+      fecha_inicio: '2021-09-16', fecha_fin: '2021-09-30', quincena: 2
     });
     expect(per.status).toBe(201);
 

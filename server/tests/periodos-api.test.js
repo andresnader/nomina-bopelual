@@ -20,7 +20,11 @@ describe('API períodos', () => {
       await auth(request(app).post('/api/colaboradores')).send({
         tipo: 'IESS',
         nombre: 'API test',
-        cedula: `A${Date.now()}`
+        cedula: `A${Date.now()}`,
+        // Sin fecha de ingreso el vínculo arranca HOY, y este test usa un
+        // período de julio 2026: al pasar esa fecha en el calendario real el
+        // colaborador dejaba de entrar y el test fallaba solo.
+        fecha_ingreso: '2020-01-01'
       })
     ).body;
     await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({

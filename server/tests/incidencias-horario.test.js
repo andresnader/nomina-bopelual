@@ -12,7 +12,10 @@ const auth = (r) => r.set('Authorization', 'Bearer x');
 async function crearColaboradorConHorario(app, horario = 'ADM') {
   const col = (
     await auth(request(app).post('/api/colaboradores')).send({
-      tipo: 'IESS', nombre: `Inc ${Date.now()}`, cedula: `IN${Date.now() % 1e8}`
+      // Vínculo en el pasado: los períodos de este test son de julio 2026 y sin
+      // esto el colaborador arranca hoy, fuera de ellos.
+      tipo: 'IESS', nombre: `Inc ${Date.now()}`, cedula: `IN${Date.now() % 1e8}`,
+      fecha_ingreso: '2020-01-01'
     })
   ).body;
   await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ horario });

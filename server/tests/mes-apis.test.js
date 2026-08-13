@@ -111,7 +111,12 @@ describe('API períodos mensuales (wizard + cascada + estado derivado)', () => {
     expect(futuro.status).toBe(201);
     for (const q of futuro.body.quincenas) {
       const det = await auth(request(app).get(`/api/periodos/${q.id}`));
-      expect(det.body.roles_pago).toEqual([]);
+      // Se asserta sobre el colaborador sembrado, no sobre el total: los
+      // archivos de test corren en paralelo y cualquiera que cree un contrato
+      // mientras tanto suma su rol a TODA quincena en BORRADOR (incluida esta,
+      // por agregarColaboradorAPeriodosBorrador), lo que volvía este test
+      // dependiente del orden de ejecución.
+      expect(det.body.roles_pago.find((r) => r.colaborador_id === col.id)).toBeFalsy();
     }
 
     // Pasado: sí genera roles para el colaborador con contrato vigente.
