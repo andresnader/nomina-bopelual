@@ -95,6 +95,63 @@ describe('cambio de tipo IESS/EXTERNO', () => {
     expect((await lineas(per.periodo.id, col.id)).ANTICIPO_QUINCENA).toBe(500); // EXTERNO: 50%
   });
 
+  // El sentido inverso: un EXTERNO que pasa a estar afiliado. Acá las líneas
+  // de ley no se borran sino que hay que CREARLAS, y el porcentaje baja del
+  // 50% (default externo) al 40% (default IESS).
+  it('al pasar de EXTERNO a IESS agrega las líneas de ley y ajusta el porcentaje', async () => {
+    const app = createApp();
+    const sello = Date.now();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'EXTERNO', nombre: `Externo a IESS ${sello}`, cedula: `EI${sello % 1e8}`,
+        fecha_ingreso: '2020-01-01', sueldo_base: 1000
+      })
+    ).body;
+    const per = (
+      await auth(request(app).post('/api/periodos')).send({
+        nombre: `Q2 ext-iess ${sello}`, fecha_inicio: '2021-08-16', fecha_fin: '2021-08-31', quincena: 2
+      })
+    ).body;
+
+    // Como EXTERNO: solo el 50% restante, sin aportes ni beneficios.
+    const antes = await lineas(per.periodo.id, col.id);
+    expect(antes.SUELDO_BASE).toBe(500);
+    expect(antes.IESS_PERSONAL).toBeUndefined();
+
+    await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ tipo: 'IESS' });
+
+    const despues = await lineas(per.periodo.id, col.id);
+    expect(despues.SUELDO_BASE).toBe(600);      // 60% restante del 40/60
+    expect(despues.IESS_PERSONAL).toBe(94.5);
+    expect(despues.DECIMO_TERCERO).toBe(83.33);
+    expect(despues.DECIMO_CUARTO).toBe(38.33);
+    expect(despues.FONDOS_RESERVA).toBe(83.3);
+  });
+
+  it('deja el neto coherente al pasar de EXTERNO a IESS', async () => {
+    const app = createApp();
+    const sello = Date.now();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'EXTERNO', nombre: `Neto ext-iess ${sello}`, cedula: `NE${sello % 1e8}`,
+        fecha_ingreso: '2020-01-01', sueldo_base: 1000
+      })
+    ).body;
+    const per = (
+      await auth(request(app).post('/api/periodos')).send({
+        nombre: `Q2 neto ext-iess ${sello}`, fecha_inicio: '2021-08-16', fecha_fin: '2021-08-31', quincena: 2
+      })
+    ).body;
+
+    await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ tipo: 'IESS' });
+
+    const { rows } = await pool.query(
+      'SELECT neto FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [per.periodo.id, col.id]
+    );
+    // 600 + 83.33 + 38.33 + 83.30 = 804.96 de ingresos, menos 94.50 de aporte.
+    expect(Number(rows[0].neto)).toBe(710.46);
+  });
+
   it('deja el neto coherente después de cambiar el tipo', async () => {
     const app = createApp();
     const sello = Date.now();
