@@ -23,21 +23,22 @@ const TIPOS_PAGO = [
 const labelTipoPago = (v) => TIPOS_PAGO.find((t) => t.valor === v)?.label ?? v;
 
 // Sección final del período: genera la vista de la nómina con la marca de
-// pago por TXT por colaborador, y las descargas del Excel (todos) y del TXT
-// del banco (solo marcados).
+// pago por TXT por colaborador, y las descargas del Excel (uno por empresa)
+// y del TXT del banco (solo marcados).
 function GenerarNomina({ periodoId, filas }) {
   const [generada, setGenerada] = useState(false);
   const [aviso, setAviso] = useState(null);
   const toast = useToast();
 
-  const descargarExcel = async () => {
+  const descargarExcel = async (empresa) => {
     setAviso(null);
-    const r = await api.get(`/periodos/${periodoId}/excel`);
+    const q = empresa ? `?empresa=${encodeURIComponent(empresa)}` : '';
+    const r = await api.get(`/periodos/${periodoId}/excel${q}`);
     descargarBlob(
       r.archivo,
       base64ABlob(r.contenidoBase64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     );
-    toast.success(`Excel ${r.archivo}: ${r.incluidos} colaboradores por ${money(r.total)}.`);
+    toast.success(`Excel ${empresa || 'todas las empresas'}: ${r.incluidos} colaboradores por ${money(r.total)}.`);
   };
 
   if (!generada) {
@@ -68,10 +69,14 @@ function GenerarNomina({ periodoId, filas }) {
             {filas.length} colaboradores · {marcados.length} por transferencia (TXT) por {money(totalMarcados)}
           </p>
         </div>
-        <button onClick={() => descargarExcel().catch((e) => setAviso({ error: e.message }))}
-          className="btn btn-primary">
-          <FileSpreadsheet size={15} /> Guardar en Excel
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {['BOPELUAL S.A.', 'CARROS-YA S.A.'].map((emp) => (
+            <button key={emp} onClick={() => descargarExcel(emp).catch((e) => setAviso({ error: e.message }))}
+              className="btn btn-secondary">
+              <FileSpreadsheet size={15} /> Excel {emp}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto -mx-4 md:mx-0 mt-4">

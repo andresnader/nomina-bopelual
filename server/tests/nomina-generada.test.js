@@ -89,6 +89,36 @@ describe('nómina generada: marca TXT, Excel y aprobar/cerrar', () => {
     expect(buffer.length).toBeGreaterThan(1000);
   });
 
+  it('el Excel filtra por empresa cuando se pasa ?empresa=', async () => {
+    const app = createApp();
+    const sello = Date.now();
+    const { rows: per } = await pool.query(
+      `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, estado)
+       VALUES ('Nómina empresa ${sello}','2026-11-01','2026-11-15',1,'APROBADO') RETURNING id`
+    );
+    const { rows: colB } = await pool.query(
+      `INSERT INTO colaboradores (tipo, cedula, nombre, empresa, cuenta_bancaria, tipo_cuenta, codigo_banco)
+       VALUES ('IESS','06${sello % 1e8}','DE CARROS','CARROS-YA S.A.','2205467800','AHORRO','10') RETURNING id`
+    );
+    await pool.query(
+      `INSERT INTO roles_pago (periodo_id, colaborador_id, total_ingresos, total_descuentos, neto)
+       VALUES ($1,$2,300,30,270)`,
+      [per[0].id, colB[0].id]
+    );
+
+    const soloBopelual = await auth(request(app).get(`/api/periodos/${per[0].id}/excel?empresa=${encodeURIComponent('BOPELUAL S.A.')}`));
+    expect(soloBopelual.status).toBe(200);
+    expect(soloBopelual.body.incluidos).toBe(0);
+    expect(soloBopelual.body.total).toBe(0);
+    expect(soloBopelual.body.archivo).toContain('bopelual');
+
+    const soloCarros = await auth(request(app).get(`/api/periodos/${per[0].id}/excel?empresa=${encodeURIComponent('CARROS-YA S.A.')}`));
+    expect(soloCarros.status).toBe(200);
+    expect(soloCarros.body.incluidos).toBe(1);
+    expect(soloCarros.body.total).toBe(270);
+    expect(soloCarros.body.archivo).toContain('carros-ya');
+  });
+
   it('un usuario ADMIN también puede aprobar y cerrar el período', async () => {
     await pool.query(`UPDATE usuarios SET rol='ADMIN' WHERE email='rrhh@bopelual.com'`);
     const app = createApp();

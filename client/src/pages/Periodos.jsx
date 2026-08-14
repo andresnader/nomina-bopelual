@@ -14,7 +14,8 @@ import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
 import { money, fecha, descargarBlob, base64ABlob } from '../utils.js';
 
-const VACIO = { nombre: '', fecha_inicio: '', fecha_fin: '', quincena: 1 };
+const VACIO = { nombre: '', fecha_inicio: '', fecha_fin: '', quincena: 1, empresa: '' };
+const EMPRESAS = ['BOPELUAL S.A.', 'CARROS-YA S.A.'];
 
 // Tarjeta-folder de un período mensual: sus dos sub-tarjetas Q1/Q2, acciones
 // en cascada (aprobar/cerrar mes), y las secciones expandibles de exportación
@@ -77,6 +78,7 @@ function MesCard({ mes, onCambio }) {
       <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
         <div className="flex items-center gap-2">
           <h3 className="font-display font-bold text-slate-900">{mes.nombre}</h3>
+          {mes.empresa && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{mes.empresa}</span>}
           <Badge estado={mes.estado} />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -213,6 +215,7 @@ export default function Periodos() {
                   <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
                     <td className="p-4">
                       <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">{p.nombre}</Link>
+                      {p.empresa && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">{p.empresa}</span>}
                     </td>
                     <td className="p-4 text-slate-600">{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</td>
                     <td className="p-4"><Badge estado={p.estado} /></td>
@@ -228,7 +231,9 @@ export default function Periodos() {
                   key={p.id}
                   top={
                     <>
-                      <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">{p.nombre}</Link>
+                      <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">
+                        {p.nombre} {p.empresa && <span className="text-slate-500 text-xs">({p.empresa})</span>}
+                      </Link>
                       <Badge estado={p.estado} />
                     </>
                   }
@@ -285,11 +290,20 @@ export default function Periodos() {
                     <select value={form.quincena}
                       onChange={(e) => setForm({ ...form, quincena: e.target.value })}
                       className="input">
-                      <option value={1}>1ra quincena (40% anticipo)</option>
-                      <option value={2}>2da quincena (60% + beneficios)</option>
+                      <option value="1">1ra quincena (40% anticipo)</option>
+                      <option value="2">2da quincena (60% + beneficios)</option>
                     </select>
                   </div>
-                  <div className="flex gap-3 items-end md:col-span-2">
+                  <div>
+                    <label className="label">Empresa</label>
+                    <select value={form.empresa || ''}
+                      onChange={(e) => setForm({ ...form, empresa: e.target.value })}
+                      className="input">
+                      <option value="">Todas (Ambas empresas)</option>
+                      {EMPRESAS.map((e) => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end gap-2 mt-2 pt-4 border-t border-slate-100">
                     <button className="btn-primary">Crear y generar roles</button>
                     <button type="button" onClick={() => setForm(null)} className="btn-ghost">Cancelar</button>
                   </div>

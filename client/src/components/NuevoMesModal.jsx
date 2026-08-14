@@ -7,6 +7,7 @@ const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
+const EMPRESAS = ['BOPELUAL S.A.', 'CARROS-YA S.A.'];
 
 function anios() {
   const actual = new Date().getFullYear();
@@ -22,6 +23,7 @@ export default function NuevoMesModal({ open, onClose, onCreado }) {
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
+  const [empresa, setEmpresa] = useState('');
   const [error, setError] = useState(null);
   const [creando, setCreando] = useState(false);
   // Colaboradores activos que no entraron al mes recién creado. Mientras haya
@@ -34,7 +36,7 @@ export default function NuevoMesModal({ open, onClose, onCreado }) {
     setError(null);
     setCreando(true);
     try {
-      const r = await api.post('/periodos/desde-mes', { anio: Number(anio), mes: Number(mes) });
+      const r = await api.post('/periodos/desde-mes', { anio: Number(anio), mes: Number(mes), empresa });
       onCreado(r);
       if (r.omitidos?.length) setOmitidos(r.omitidos);
       else onClose();
@@ -83,6 +85,13 @@ export default function NuevoMesModal({ open, onClose, onCreado }) {
           <label className="label">Mes</label>
           <select className="input" value={mes} onChange={(e) => setMes(e.target.value)}>
             {MESES.map((nombre, i) => <option key={nombre} value={i + 1}>{nombre}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="label">Empresa</label>
+          <select className="input" value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+            <option value="">Todas (Ambas empresas)</option>
+            {EMPRESAS.map((e) => <option key={e} value={e}>{e}</option>)}
           </select>
         </div>
         {error && <p className="col-span-2 text-sm text-red-600">{error}</p>}

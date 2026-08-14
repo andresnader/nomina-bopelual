@@ -24,7 +24,7 @@ describe('NuevoMesModal', () => {
     fireEvent.change(screen.getByDisplayValue(String(new Date().getFullYear())), { target: { value: '2025' } });
     fireEvent.click(screen.getByText('Crear mes'));
 
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/periodos/desde-mes', { anio: 2025, mes: new Date().getMonth() + 1 }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/periodos/desde-mes', { anio: 2025, mes: new Date().getMonth() + 1, empresa: '' }));
     await waitFor(() => expect(onCreado).toHaveBeenCalledWith({ periodo_mes: { id: 'm1' }, quincenas: [], creados: 2 }));
     expect(onClose).toHaveBeenCalled();
   });

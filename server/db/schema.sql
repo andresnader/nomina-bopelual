@@ -10,3 +10,4 @@ DROP TABLE IF EXISTS lineas_rol, roles_pago, facturas_proveedor, abonos_prestamo
 \i migrations/005_abonos_prestamo.sql
 \i migrations/006_bancos.sql
 \i migrations/007_origen_lineas_y_empresas.sql
+\i migrations/030_periodo_empresa.sql

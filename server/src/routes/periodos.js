@@ -35,7 +35,7 @@ function validarMesFuturo(anio, mes) {
 
 // POST /desde-mes — wizard de creación de período mensual
 router.post('/desde-mes', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { anio, mes } = req.body;
+  const { anio, mes, empresa } = req.body;
   if (!anio || !mes || mes < 1 || mes > 12 || anio < 2020 || anio > 2099) {
     return res.status(400).json({ error: 'año (2020-2099) y mes (1-12) requeridos' });
   }
@@ -47,7 +47,7 @@ router.post('/desde-mes', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const resultado = await crearMes(client, { anio, mes, creado_por: req.usuario.id });
+    const resultado = await crearMes(client, { anio, mes, creado_por: req.usuario.id, empresa });
     await client.query('COMMIT');
     res.status(201).json(resultado);
   } catch (e) {
@@ -181,7 +181,7 @@ router.get('/', requireRole(['ADMIN', 'RRHH', 'GERENCIA']), async (_req, res) =>
 });
 
 router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-  const { nombre, fecha_inicio, fecha_fin, quincena } = req.body;
+  const { nombre, fecha_inicio, fecha_fin, quincena, empresa } = req.body;
   if (!nombre || !fecha_inicio || !fecha_fin || !quincena) {
     return res.status(400).json({ error: 'campos requeridos faltantes' });
   }
@@ -189,7 +189,7 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
   try {
     await client.query('BEGIN');
     const periodo = await crearPeriodo(client, {
-      nombre, fecha_inicio, fecha_fin, quincena, creado_por: req.usuario.id
+      nombre, fecha_inicio, fecha_fin, quincena, creado_por: req.usuario.id, empresa
     });
     const sbu = Number(await getParam(client, 'SBU', '460'));
     const pctAnticipo = Number(await getParam(client, 'PORCENTAJE_ANTICIPO', '0.40'));
@@ -460,34 +460,39 @@ router.get('/:id/txt-pago', requireRole(['ADMIN', 'RRHH']), async (req, res) => 
 
 // Excel de la nómina del período: hoja resumen (una fila por colaborador) +
 // hoja detalle (todas las líneas). Incluye a TODOS los roles, marcados o no
-// para TXT. Se devuelve como JSON con base64 (mismo patrón que el TXT) para
-// no romper el manejo de respuestas del cliente.
+// para TXT. Acepta ?empresa= para exportar una sola empresa (mismo patrón
+// que el TXT). Se devuelve como JSON con base64 (mismo patrón que el TXT)
+// para no romper el manejo de respuestas del cliente.
 router.get('/:id/excel', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { empresa } = req.query;
   const { rows: p } = await pool.query('SELECT * FROM periodos WHERE id=$1', [req.params.id]);
   if (p.length === 0) return res.status(404).json({ error: 'no encontrado' });
+
+  const filtroEmpresa = empresa ? `AND c.empresa=$${2}` : '';
+  const params = empresa ? [req.params.id, empresa] : [req.params.id];
 
   const { rows: roles } = await pool.query(
     `SELECT rp.total_ingresos, rp.total_descuentos, rp.neto, rp.tipo_pago,
             c.nombre, c.cedula, c.tipo, c.empresa, c.forma_pago, c.clasificacion
      FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
-     WHERE rp.periodo_id=$1
+     WHERE rp.periodo_id=$1 ${filtroEmpresa}
      ORDER BY c.nombre`,
-    [req.params.id]
+    params
   );
   const { rows: lineas } = await pool.query(
     `SELECT c.nombre AS colaborador_nombre, l.clase, l.tipo_linea, l.descripcion, l.monto
      FROM lineas_rol l
      JOIN roles_pago rp ON rp.id=l.rol_pago_id
      JOIN colaboradores c ON c.id=rp.colaborador_id
-     WHERE rp.periodo_id=$1
+     WHERE rp.periodo_id=$1 ${filtroEmpresa}
      ORDER BY c.nombre, l.clase, l.creado_en`,
-    [req.params.id]
+    params
   );
 
   const buffer = generarExcelNomina(roles, lineas);
   const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   res.json({
-    archivo: `nomina_${slug(p[0].nombre)}.xlsx`,
+    archivo: ['nomina', slug(p[0].nombre), empresa && slug(empresa)].filter(Boolean).join('_') + '.xlsx',
     contenidoBase64: buffer.toString('base64'),
     incluidos: roles.length,
     total: round2(roles.reduce((s, r) => s + Number(r.neto), 0)),

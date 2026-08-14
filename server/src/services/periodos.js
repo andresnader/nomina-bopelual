@@ -24,9 +24,9 @@ function salidaEntraAlCierre(fechaSalida, fechaFin) {
 
 export async function crearPeriodo(client, p) {
   const { rows } = await client.query(
-    `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, creado_por)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [p.nombre, p.fecha_inicio, p.fecha_fin, p.quincena, p.creado_por]
+    `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, creado_por, empresa)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [p.nombre, p.fecha_inicio, p.fecha_fin, p.quincena, p.creado_por, p.empresa || null]
   );
   return rows[0];
 }
@@ -348,6 +348,8 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4, 
   const periodo = periodoRows[0];
   // Solo entran colaboradores con un vínculo de empresa que cubra el período
   // (JOIN LATERAL, no LEFT JOIN: excluye a quien salió antes o no ha entrado).
+  // Si el período es exclusivo de una empresa, se filtra por esa empresa.
+  const filtroEmpresa = periodo.empresa ? `AND c.empresa = '${periodo.empresa}'` : '';
   const { rows: colaboradores } = await client.query(
     `SELECT c.*, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono,
             v.fecha_entrada AS vinc_entrada, v.fecha_salida AS vinc_salida
@@ -359,7 +361,7 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4, 
          AND (ep.fecha_salida IS NULL OR ep.fecha_salida >= $1)
        ORDER BY ep.fecha_entrada DESC LIMIT 1
      ) v ON true
-     WHERE c.activo=true
+     WHERE c.activo=true ${filtroEmpresa}
        AND (v.fecha_salida IS NULL OR v.fecha_salida >= $2::date - ${DIAS_VENTANA_CIERRE - 1})`,
     [periodo.fecha_inicio, periodo.fecha_fin]
   );
@@ -380,6 +382,7 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4, 
 // reporta el primero que aplica en este orden: sin contrato vigente pesa más
 // que sin vínculo, porque es el que más veces explica la ausencia.
 export async function colaboradoresOmitidos(client, periodo, idsIncluidos) {
+  const filtroEmpresa = periodo.empresa ? `AND c.empresa = '${periodo.empresa}'` : '';
   const { rows } = await client.query(
     `SELECT c.id, c.nombre,
             CASE
@@ -395,7 +398,7 @@ export async function colaboradoresOmitidos(client, periodo, idsIncluidos) {
               ELSE 'SALIDA_PREVIA'
             END AS motivo
      FROM colaboradores c
-     WHERE c.activo = true AND c.id <> ALL($3::uuid[])
+     WHERE c.activo = true AND c.id <> ALL($3::uuid[]) ${filtroEmpresa}
      ORDER BY c.nombre`,
     [periodo.fecha_inicio, periodo.fecha_fin, idsIncluidos]
   );
@@ -616,34 +619,34 @@ export function pctAnticipoPorTipo(col, pctGlobal, pctExterno) {
 // Crea un período mensual (padre) con sus dos quincenas hijas. Si una quincena
 // ya existe suelta, crea solo la faltante. Genera roles automáticamente en las
 // quincenas cuya fecha_inicio ya pasó o es el mes actual.
-export async function crearMes(client, { anio, mes, creado_por }) {
+export async function crearMes(client, { anio, mes, creado_por, empresa }) {
   const mesStr = String(mes).padStart(2, '0');
   const q1Inicio = `${anio}-${mesStr}-01`;
   const q1Fin = `${anio}-${mesStr}-15`;
   const q2Inicio = `${anio}-${mesStr}-16`;
   const q2Fin = new Date(anio, mes, 0).toISOString().slice(0, 10); // último día del mes
 
-  // Validar que no exista ya un padre para este mes
+  // Validar que no exista ya un padre para este mes y empresa
   const { rows: existente } = await client.query(
     `SELECT id FROM periodos WHERE tipo_periodo='MES' AND quincena='AMBAS'
-     AND DATE_TRUNC('month', fecha_inicio) = $1::date`,
-    [`${anio}-${mesStr}-01`]
+     AND DATE_TRUNC('month', fecha_inicio) = $1::date AND empresa IS NOT DISTINCT FROM $2`,
+    [`${anio}-${mesStr}-01`, empresa || null]
   );
   if (existente.length > 0) {
-    throw new Error(`el mes ${mes}/${anio} ya tiene período padre`);
+    throw new Error(`el mes ${mes}/${anio}${empresa ? ' de ' + empresa : ''} ya tiene período padre`);
   }
 
   const nombre = new Date(anio, mes - 1, 1).toLocaleDateString('es-EC', { month: 'long', year: 'numeric' });
   // Capitalizar primera letra
   const nombreCapitalizado = nombre.charAt(0).toUpperCase() + nombre.slice(1);
 
-  // Ver qué quincenas ya existen sueltas en este mes
+  // Ver qué quincenas ya existen sueltas en este mes y misma empresa
   const { rows: qExistente } = await client.query(
     `SELECT quincena, id, to_char(fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(fecha_fin,'YYYY-MM-DD') AS fecha_fin
      FROM periodos WHERE tipo_periodo='QUINCENA' AND quincena IN ('1','2')
-     AND DATE_TRUNC('month', fecha_inicio) = $1::date`,
-    [`${anio}-${mesStr}-01`]
+     AND DATE_TRUNC('month', fecha_inicio) = $1::date AND empresa IS NOT DISTINCT FROM $2`,
+    [`${anio}-${mesStr}-01`, empresa || null]
   );
   const qExistenteMap = new Map(qExistente.map((r) => [r.quincena, r]));
 
@@ -681,9 +684,9 @@ export async function crearMes(client, { anio, mes, creado_por }) {
 
   // Crear padre
   const { rows: padreRows } = await client.query(
-    `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por)
-     VALUES ($1,$2,$3,'AMBAS','MES','BORRADOR',$4) RETURNING *`,
-    [nombreCapitalizado, `${anio}-${mesStr}-01`, q2Fin, creado_por]
+    `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por, empresa)
+     VALUES ($1,$2,$3,'AMBAS','MES','BORRADOR',$4,$5) RETURNING *`,
+    [nombreCapitalizado + (empresa ? ` - ${empresa}` : ''), `${anio}-${mesStr}-01`, q2Fin, creado_por, empresa || null]
   );
   const padre = padreRows[0];
 
@@ -706,17 +709,25 @@ export async function crearMes(client, { anio, mes, creado_por }) {
       const { rows: qRows } = await client.query('SELECT * FROM periodos WHERE id=$1', [id]);
       quincenas.push(qRows[0]);
     } else {
-      const { rows: qRows } = await client.query(
-        `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por, mes_periodo_id)
-         VALUES ($1,$2,$3,$4,'QUINCENA','BORRADOR',$5,$6) RETURNING *`,
-        [`${nombreCapitalizado} Q${q}`, qInicio, qFin, q, creado_por, padre.id]
-      );
-      quincenas.push(qRows[0]);
+        const { rows } = await client.query(
+          `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado, creado_por, mes_periodo_id, empresa)
+           VALUES ($1,$2,$3,$4,'QUINCENA','BORRADOR',$5,$6,$7) RETURNING *`,
+          [
+            `${nombreCapitalizado} Q${q}` + (empresa ? ` - ${empresa}` : ''),
+            qInicio,
+            qFin,
+            q,
+            creado_por,
+            padre.id,
+            empresa || null
+          ]
+        );
+        quincenas.push(rows[0]);
       creados++;
 
       // Generar roles si la quincena ya debería haber comenzado
       if (qInicio <= hoy) {
-        const { omitidos } = await generarRoles(client, qRows[0].id, { sbu, pctAnticipo, pctAnticipoExterno });
+        const { omitidos } = await generarRoles(client, rows[0].id, { sbu, pctAnticipo, pctAnticipoExterno });
         for (const o of omitidos) omitidosPorId.set(o.id, o);
       }
     }
