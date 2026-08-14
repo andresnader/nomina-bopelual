@@ -195,58 +195,93 @@ export default function Periodos() {
         <Card className="text-center text-slate-500 p-8">No hay períodos registrados</Card>
       )}
 
-      {meses.map((mes) => <MesCard key={mes.id} mes={mes} onCambio={cargar} />)}
+      {(() => {
+        if (meses.length === 0) return null;
+        
+        // Identificar el "mes en trabajo": el mes más antiguo que no esté CERRADO
+        const noCerrados = meses.filter(m => m.estado !== 'CERRADO');
+        const mesEnCurso = [...noCerrados].sort((a, b) => new Date(a.hijas[0]?.fecha_inicio || 0) - new Date(b.hijas[0]?.fecha_inicio || 0))[0];
+        
+        const principal = mesEnCurso || meses[0]; // Si todos están cerrados, mostrar el primero como principal (o ninguno, pero mejor mostrar al menos 1 si no se despliega el resto)
+        const secundarios = meses.filter(m => m.id !== principal?.id);
+
+        return (
+          <>
+            <h2 className="text-sm font-semibold text-slate-600 mb-2">Mes en trabajo</h2>
+            {principal && <MesCard mes={principal} onCambio={cargar} />}
+
+            {secundarios.length > 0 && (
+              <details className="mb-6 group">
+                <summary className="cursor-pointer flex items-center gap-2 text-sm font-medium text-slate-600 mb-4 hover:text-slate-900 transition-colors select-none list-none">
+                  <span className="group-open:hidden"><ChevronDown size={16} /></span>
+                  <span className="hidden group-open:block"><ChevronUp size={16} /></span>
+                  Mostrar otros meses ({secundarios.length})
+                </summary>
+                <div className="animate-slide-up space-y-4">
+                  {secundarios.map((mes) => <MesCard key={mes.id} mes={mes} onCambio={cargar} />)}
+                </div>
+              </details>
+            )}
+          </>
+        );
+      })()}
 
       {sueltas.length > 0 && (
         <>
-          <h2 className="text-sm font-semibold text-slate-600 mt-2 mb-2">Quincenas sueltas</h2>
-          <div className="card p-0 overflow-hidden animate-fade-in mb-6">
-            <table className="hidden md:table w-full text-sm">
-              <thead>
-                <tr className="border-b border-brand-600/30">
-                  <th className="table-header p-4 text-left">Período</th>
-                  <th className="table-header p-4 text-left">Rango</th>
-                  <th className="table-header p-4 text-left">Estado</th>
-                  <th className="table-header p-4 text-right">Total neto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sueltas.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                    <td className="p-4">
-                      <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">{p.nombre}</Link>
-                      {p.empresa && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">{p.empresa}</span>}
-                    </td>
-                    <td className="p-4 text-slate-600">{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</td>
-                    <td className="p-4"><Badge estado={p.estado} /></td>
-                    <td className="p-4 text-right font-medium text-slate-800">{money(p.total_neto)}</td>
+          <details className="mb-6 group">
+            <summary className="cursor-pointer flex items-center gap-2 text-sm font-semibold text-slate-600 mb-2 hover:text-slate-900 transition-colors select-none list-none">
+              <span className="group-open:hidden"><ChevronDown size={16} /></span>
+              <span className="hidden group-open:block"><ChevronUp size={16} /></span>
+              Quincenas sueltas ({sueltas.length})
+            </summary>
+            <div className="card p-0 overflow-hidden animate-slide-up mb-6">
+              <table className="hidden md:table w-full text-sm">
+                <thead>
+                  <tr className="border-b border-brand-600/30">
+                    <th className="table-header p-4 text-left">Período</th>
+                    <th className="table-header p-4 text-left">Rango</th>
+                    <th className="table-header p-4 text-left">Estado</th>
+                    <th className="table-header p-4 text-right">Total neto</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sueltas.map((p) => (
+                    <tr key={p.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                      <td className="p-4">
+                        <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">{p.nombre}</Link>
+                        {p.empresa && <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">{p.empresa}</span>}
+                      </td>
+                      <td className="p-4 text-slate-600">{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</td>
+                      <td className="p-4"><Badge estado={p.estado} /></td>
+                      <td className="p-4 text-right font-medium text-slate-800">{money(p.total_neto)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-            <div className="md:hidden space-y-2 p-2">
-              {sueltas.map((p) => (
-                <MobileCard
-                  key={p.id}
-                  top={
-                    <>
-                      <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">
-                        {p.nombre} {p.empresa && <span className="text-slate-500 text-xs">({p.empresa})</span>}
-                      </Link>
-                      <Badge estado={p.estado} />
-                    </>
-                  }
-                  meta={
-                    <span className="flex items-center justify-between">
-                      <span>{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</span>
-                      <span className="font-medium text-slate-700">{money(p.total_neto)}</span>
-                    </span>
-                  }
-                />
-              ))}
+              <div className="md:hidden space-y-2 p-2">
+                {sueltas.map((p) => (
+                  <MobileCard
+                    key={p.id}
+                    top={
+                      <>
+                        <Link to={`/periodos/${p.id}`} className="link text-sm font-medium">
+                          {p.nombre} {p.empresa && <span className="text-slate-500 text-xs">({p.empresa})</span>}
+                        </Link>
+                        <Badge estado={p.estado} />
+                      </>
+                    }
+                    meta={
+                      <span className="flex items-center justify-between">
+                        <span>{fecha(p.fecha_inicio)} – {fecha(p.fecha_fin)}</span>
+                        <span className="font-medium text-slate-700">{money(p.total_neto)}</span>
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          </details>
         </>
       )}
 
