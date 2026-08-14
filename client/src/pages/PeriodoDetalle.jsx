@@ -10,6 +10,7 @@ import RoleGate from '../components/RoleGate.jsx';
 import { useToast } from '../components/Toast.jsx';
 import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
+import OmitidosAviso from '../components/OmitidosAviso.jsx';
 import { money, descargarBlob, base64ABlob, totalesPorEmpresa } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
@@ -143,9 +144,16 @@ export default function PeriodoDetalle() {
   const [padreNombre, setPadreNombre] = useState(null);
   const [error, setError] = useState(null);
   const [empresa, setEmpresa] = useState('');
+  // Colaboradores activos sin rol en este período. Se consulta aparte del
+  // período porque también aplica a los ya creados: un colaborador cargado
+  // después de generar la quincena no aparece hasta que se lo sincroniza.
+  const [omitidos, setOmitidos] = useState([]);
   const toast = useToast();
 
-  const cargar = () => api.get(`/periodos/${id}`).then(setPeriodo).catch((e) => setError(e.message));
+  const cargar = () => {
+    api.get(`/periodos/${id}`).then(setPeriodo).catch((e) => setError(e.message));
+    api.get(`/periodos/${id}/omitidos`).then(setOmitidos).catch(() => setOmitidos([]));
+  };
   useEffect(() => {
     cargar();
   }, [id]);
@@ -239,6 +247,8 @@ export default function PeriodoDetalle() {
       </PageTitle>
 
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
+
+      <OmitidosAviso omitidos={omitidos} className="mb-4" />
 
       <Card className="mb-4">
         <div className="flex items-center justify-between flex-wrap gap-3">

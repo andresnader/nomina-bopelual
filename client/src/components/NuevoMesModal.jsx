@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal } from './Modal.jsx';
+import OmitidosAviso from './OmitidosAviso.jsx';
 import { api } from '../api.js';
 
 const MESES = [
@@ -23,6 +24,10 @@ export default function NuevoMesModal({ open, onClose, onCreado }) {
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [error, setError] = useState(null);
   const [creando, setCreando] = useState(false);
+  // Colaboradores activos que no entraron al mes recién creado. Mientras haya
+  // alguno el modal se queda abierto mostrándolos: el mes YA se creó (no es un
+  // error), pero si esa lista se pierde nadie se entera de que faltan.
+  const [omitidos, setOmitidos] = useState(null);
 
   const crear = async (e) => {
     e.preventDefault();
@@ -31,13 +36,31 @@ export default function NuevoMesModal({ open, onClose, onCreado }) {
     try {
       const r = await api.post('/periodos/desde-mes', { anio: Number(anio), mes: Number(mes) });
       onCreado(r);
-      onClose();
+      if (r.omitidos?.length) setOmitidos(r.omitidos);
+      else onClose();
     } catch (err) {
       setError(err.message);
     } finally {
       setCreando(false);
     }
   };
+
+  const cerrar = () => {
+    setOmitidos(null);
+    onClose();
+  };
+
+  if (omitidos) {
+    return (
+      <Modal open={open} onClose={cerrar} title="Mes creado, con avisos" size="sm"
+        footer={<button type="button" onClick={cerrar} className="btn btn-primary">Entendido</button>}>
+        <OmitidosAviso omitidos={omitidos} />
+        <p className="mt-3 text-xs text-muted">
+          El mes se creó igual. Corregí sus fichas y volvé a sincronizar el período para que entren.
+        </p>
+      </Modal>
+    );
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Nuevo mes completo" size="sm"

@@ -11,6 +11,11 @@ import { vinculoQueCubre } from './empleo.js';
 // de haberes se hace aparte, manual). Sólo entra al cierre si sigue activo o si
 // salió dentro de esta ventana.
 const DIAS_VENTANA_CIERRE = 3;
+
+// Líneas que solo le corresponden a un colaborador IESS en la 2da quincena.
+// Se listan aparte porque hay que poder BORRARLAS si su tipo cambia a EXTERNO.
+const LINEAS_SOLO_IESS = ['IESS_PERSONAL', 'DECIMO_TERCERO', 'DECIMO_CUARTO', 'FONDOS_RESERVA'];
+
 function salidaEntraAlCierre(fechaSalida, fechaFin) {
   if (!fechaSalida) return true;
   const dias = Math.round((new Date(fechaFin) - new Date(fechaSalida)) / 86400000);
@@ -101,6 +106,17 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
       await aplicar({ tipo: 'DECIMO_TERCERO', clase: 'INGRESO', monto: calc.decimoTercero(sueldo) });
       await aplicar({ tipo: 'DECIMO_CUARTO', clase: 'INGRESO', monto: calc.decimoCuarto(sbu) });
       await aplicar({ tipo: 'FONDOS_RESERVA', clase: 'INGRESO', monto: calc.fondosReserva(sueldo, 999), desc: 'Fondos de reserva' });
+    } else {
+      // Un EXTERNO no aporta al IESS ni recibe beneficios de ley. Si el
+      // colaborador estaba cargado como IESS y se corrigió su tipo, estas
+      // líneas ya existen en el rol y hay que sacarlas: el resto de esta
+      // función solo inserta o actualiza, nunca borra, así que quedarían
+      // pegadas inflando el neto. Es idempotente: si no hay nada, no borra nada.
+      await client.query(
+        `DELETE FROM lineas_rol WHERE rol_pago_id=$1 AND tipo_linea = ANY($2)`,
+        [rolId, LINEAS_SOLO_IESS]
+      );
+      for (const t of LINEAS_SOLO_IESS) existentesPorTipo.delete(t);
     }
   }
 
@@ -353,7 +369,37 @@ export async function generarRoles(client, periodoId, { sbu, pctAnticipo = 0.4, 
     await generarRolColaborador(client, periodoId, periodo, col, pctAnticipo, pctAnticipoExterno, sbu);
     creados++;
   }
-  return { creados };
+  const omitidos = await colaboradoresOmitidos(client, periodo, colaboradores.map((c) => c.id));
+  return { creados, omitidos };
+}
+
+// Los colaboradores activos que quedaron FUERA de un período, con el motivo.
+// Se calcula por diferencia contra los que sí entraron (`idsIncluidos`) en vez
+// de re-implementar la condición de inclusión: así no puede desincronizarse de
+// generarRoles si esa condición cambia. El motivo sí se deduce acá, y se
+// reporta el primero que aplica en este orden: sin contrato vigente pesa más
+// que sin vínculo, porque es el que más veces explica la ausencia.
+export async function colaboradoresOmitidos(client, periodo, idsIncluidos) {
+  const { rows } = await client.query(
+    `SELECT c.id, c.nombre,
+            CASE
+              WHEN NOT EXISTS (
+                SELECT 1 FROM contratos ct
+                WHERE ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
+              ) THEN 'SIN_CONTRATO'
+              WHEN NOT EXISTS (
+                SELECT 1 FROM empleo_periodos ep
+                WHERE ep.colaborador_id=c.id AND ep.fecha_entrada <= $2
+                  AND (ep.fecha_salida IS NULL OR ep.fecha_salida >= $1)
+              ) THEN 'SIN_VINCULO'
+              ELSE 'SALIDA_PREVIA'
+            END AS motivo
+     FROM colaboradores c
+     WHERE c.activo = true AND c.id <> ALL($3::uuid[])
+     ORDER BY c.nombre`,
+    [periodo.fecha_inicio, periodo.fecha_fin, idsIncluidos]
+  );
+  return rows;
 }
 
 // Si al crear el primer contrato (sueldo) de un colaborador hay uno o más
@@ -643,6 +689,9 @@ export async function crearMes(client, { anio, mes, creado_por }) {
 
   const quincenas = [];
   let creados = 0;
+  // Un mismo colaborador roto falta en las dos quincenas; se reporta una sola
+  // vez (el Map se queda con la última lectura, que es igual de válida).
+  const omitidosPorId = new Map();
 
   for (const q of ['1', '2']) {
     const qInicio = q === '1' ? q1Inicio : q2Inicio;
@@ -667,12 +716,13 @@ export async function crearMes(client, { anio, mes, creado_por }) {
 
       // Generar roles si la quincena ya debería haber comenzado
       if (qInicio <= hoy) {
-        await generarRoles(client, qRows[0].id, { sbu, pctAnticipo, pctAnticipoExterno });
+        const { omitidos } = await generarRoles(client, qRows[0].id, { sbu, pctAnticipo, pctAnticipoExterno });
+        for (const o of omitidos) omitidosPorId.set(o.id, o);
       }
     }
   }
 
-  return { periodo_mes: padre, quincenas, creados };
+  return { periodo_mes: padre, quincenas, creados, omitidos: [...omitidosPorId.values()] };
 }
 
 // Agrupa quincenas sueltas existentes en meses padre. Backfill único para

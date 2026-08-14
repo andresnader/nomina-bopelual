@@ -41,6 +41,7 @@ function FichaTab({ col, onGuardado, onError }) {
   const [form, setForm] = useState({
     nombre: col.nombre ?? '', email: col.email ?? '', cedula: col.cedula ?? '',
     departamento: col.departamento ?? '', cargo: col.cargo ?? '',
+    tipo: col.tipo ?? 'IESS',
     clasificacion: col.clasificacion ?? 'ADMINISTRATIVO',
     empresa: col.empresa ?? '', centro_costo: col.centro_costo ?? '', cargas_personales: col.cargas_personales ?? 0,
     banco: col.banco ?? '', codigo_banco: col.codigo_banco ?? '', tipo_cuenta: col.tipo_cuenta ?? 'AHORRO',
@@ -92,6 +93,16 @@ function FichaTab({ col, onGuardado, onError }) {
           <label className="text-sm text-slate-600">Email {campo('email', { type: 'email' })}</label>
           <label className="text-sm text-slate-600">Departamento {campo('departamento')}</label>
           <label className="text-sm text-slate-600">Cargo {campo('cargo')}</label>
+          {/* Define el % de la quincena, si se prorratea por días y si le
+              tocan aporte al IESS y beneficios de ley. Al cambiarlo se
+              recalculan sus quincenas en BORRADOR. */}
+          <label className="text-sm text-slate-600">Tipo de relación
+            <select className="input w-full" value={form.tipo}
+              onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+              <option value="IESS">IESS (rol de pagos)</option>
+              <option value="EXTERNO">Externo (servicios)</option>
+            </select>
+          </label>
           <label className="text-sm text-slate-600">Clasificación (archivo de pago)
             <select className="input w-full" value={form.clasificacion}
               onChange={(e) => setForm({ ...form, clasificacion: e.target.value })}>

@@ -20,7 +20,7 @@ describe('GET /api/periodos/:id/txt-pago', () => {
 
     const { rows: per } = await pool.query(
       `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, estado)
-       VALUES ('TXT test ${sello}','2026-09-01','2026-09-15',1,'CERRADO') RETURNING id`
+       VALUES ('TXT test ${sello}','2021-09-01','2021-09-15',1,'CERRADO') RETURNING id`
     );
     const { rows: conCuenta } = await pool.query(
       `INSERT INTO colaboradores (tipo, cedula, nombre, departamento, empresa, cuenta_bancaria, tipo_cuenta, codigo_banco)
@@ -74,7 +74,7 @@ describe('GET /api/periodos/:id/txt-pago', () => {
     const sello = Date.now();
     const { rows: per } = await pool.query(
       `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, estado)
-       VALUES ('TXT solo-tipo ${sello}','2026-09-01','2026-09-15',1,'BORRADOR') RETURNING id`
+       VALUES ('TXT solo-tipo ${sello}','2021-09-01','2021-09-15',1,'BORRADOR') RETURNING id`
     );
     const soloTipo = await auth(request(app).get(`/api/periodos/${per[0].id}/txt-pago?tipo=IESS`));
     expect(soloTipo.status).toBe(400);

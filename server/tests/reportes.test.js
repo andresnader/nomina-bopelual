@@ -20,7 +20,10 @@ describe('reportes', () => {
       await auth(request(app).post('/api/colaboradores')).send({
         tipo: 'IESS',
         nombre: 'CSV Col',
-        cedula: `V${Date.now()}`
+        cedula: `V${Date.now()}`,
+        // Igual que en periodos-api: el vínculo tiene que cubrir el período de
+        // julio 2026 del test, no la fecha de hoy.
+        fecha_ingreso: '2020-01-01'
       })
     ).body;
     await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
@@ -49,7 +52,8 @@ describe('reportes', () => {
       await auth(request(app).post('/api/colaboradores')).send({
         tipo: 'IESS',
         nombre: '=SUM(1+1)',
-        cedula: `F${Date.now()}`
+        cedula: `F${Date.now()}`,
+        fecha_ingreso: '2020-01-01'
       })
     ).body;
     await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({

@@ -80,28 +80,11 @@ export function createApp() {
     res.json(rows);
   });
 
-  // Actualizar contrato
-  app.patch('/api/colaboradores/:colaboradorId/contratos/:contratoId', requireAuth, requireRole(['ADMIN', 'RRHH']), async (req, res) => {
-    const { colaboradorId, contratoId } = req.params;
-    const permitidos = ['sueldo_base', 'fecha_inicio', 'fecha_fin', 'tipo_contrato', 'notas'];
-    const updates = [];
-    const vals = [];
-    let i = 1;
-    for (const campo of permitidos) {
-      if (req.body[campo] !== undefined) {
-        updates.push(`${campo}=$${i++}`);
-        vals.push(req.body[campo]);
-      }
-    }
-    if (updates.length === 0) return res.status(400).json({ error: 'no hay campos para actualizar' });
-    vals.push(contratoId, colaboradorId);
-    const { rows } = await pool.query(
-      `UPDATE contratos SET ${updates.join(', ')} WHERE id=$${i++} AND colaborador_id=$${i} RETURNING *`,
-      vals
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'contrato no encontrado' });
-    res.json(rows[0]);
-  });
+  // El PATCH de contrato vive en routes/colaboradores.js (montado arriba, en
+  // /api/colaboradores). Acá hubo una segunda copia de la misma ruta que nunca
+  // llegaba a ejecutarse —el router gana por orden de registro— y que además
+  // había quedado atrás: sin `bono` entre sus campos y sin validar
+  // tipo_contrato. Se eliminó para que no vuelva a confundir.
   app.use(express.static(join(__dirname, '../../client/dist')));
   app.get('*', (_req, res) => res.sendFile(join(__dirname, '../../client/dist/index.html')));
   return app;

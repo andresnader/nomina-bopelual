@@ -18,7 +18,7 @@ describe('bloqueo de edición por grupo aprobado', () => {
     const s = Date.now();
     const { rows: p } = await pool.query(
       `INSERT INTO periodos (nombre,fecha_inicio,fecha_fin,quincena)
-       VALUES ('lock ${s}','2026-09-01','2026-09-15',1) RETURNING id`);
+       VALUES ('lock ${s}','2021-09-01','2021-09-15',1) RETURNING id`);
     const { rows: c } = await pool.query(
       `INSERT INTO colaboradores (tipo,nombre,cedula,empresa,clasificacion)
        VALUES ('IESS','LOCK ${s}','L${s%1e8}','BOPELUAL S.A.','COMERCIAL') RETURNING id`);

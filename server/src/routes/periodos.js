@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import {
   crearPeriodo, generarRoles, transicionarPeriodo, sincronizarPeriodo, eliminarRol,
   crearMes, transicionarPeriodoCascada, sincronizarPeriodoCascada, estadoDerivadoMes,
+  colaboradoresOmitidos,
 } from '../services/periodos.js';
 import { generarTxtPichincha } from '../lib/txt-pichincha.js';
 import { generarExcelNomina } from '../lib/excel-nomina.js';
@@ -192,9 +193,9 @@ router.post('/', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     });
     const sbu = Number(await getParam(client, 'SBU', '460'));
     const pctAnticipo = Number(await getParam(client, 'PORCENTAJE_ANTICIPO', '0.40'));
-    const { creados } = await generarRoles(client, periodo.id, { sbu, pctAnticipo });
+    const { creados, omitidos } = await generarRoles(client, periodo.id, { sbu, pctAnticipo });
     await client.query('COMMIT');
-    res.status(201).json({ periodo, creados });
+    res.status(201).json({ periodo, creados, omitidos });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
@@ -233,6 +234,20 @@ function accionHandler(accion) {
     }
   };
 }
+// Colaboradores activos que NO tienen rol en este período, con el motivo. El
+// aviso que devuelve la creación solo sirve para períodos nuevos; esto permite
+// revisar uno ya creado (que es como apareció el problema: agosto ya existía).
+router.get('/:id/omitidos', requireRole(['ADMIN', 'RRHH', 'GERENCIA']), async (req, res) => {
+  const { rows: periodo } = await pool.query(
+    'SELECT id, fecha_inicio, fecha_fin FROM periodos WHERE id=$1', [req.params.id]
+  );
+  if (periodo.length === 0) return res.status(404).json({ error: 'no encontrado' });
+  const { rows: conRol } = await pool.query(
+    'SELECT colaborador_id FROM roles_pago WHERE periodo_id=$1', [req.params.id]
+  );
+  res.json(await colaboradoresOmitidos(pool, periodo[0], conRol.map((r) => r.colaborador_id)));
+});
+
 router.post('/:id/aprobar', requireRole(['ADMIN', 'RRHH']), accionHandler('aprobar'));
 router.post('/:id/cerrar', requireRole(['ADMIN', 'RRHH']), accionHandler('cerrar'));
 

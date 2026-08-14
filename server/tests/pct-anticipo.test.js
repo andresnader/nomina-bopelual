@@ -48,7 +48,11 @@ describe('pct_anticipo por colaborador', () => {
     expect(await anticipoDe(sinOverride.id)).toBe(400); // global 40%
   });
 
-  it('sincronizar recalcula el anticipo si pct_anticipo cambia después de generado el rol', async () => {
+  // Antes había que sincronizar el rol a mano para que un pct_anticipo nuevo
+  // llegara a una quincena ya generada. Ahora el propio PATCH del colaborador
+  // reconcilia sus períodos en BORRADOR, y el sync posterior no encuentra nada
+  // que corregir (queda idempotente).
+  it('el PATCH del colaborador recalcula el anticipo de un rol ya generado', async () => {
     const app = createApp();
     const per = await auth(request(app).post('/api/periodos')).send({
       nombre: `pct tardio ${Date.now()}`, fecha_inicio: '2027-06-01', fecha_fin: '2027-06-15', quincena: 1
@@ -71,11 +75,13 @@ describe('pct_anticipo por colaborador', () => {
     // Ahora, después, RRHH configura el 50% individual.
     await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ pct_anticipo: 0.5 });
 
-    const sync = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
-    expect(sync.status).toBe(200);
-    expect(sync.body.actualizadas).toBeGreaterThanOrEqual(1);
-
+    // Sin pasar por "sincronizar": el rol ya quedó al día.
     const anticipoDespues = await auth(request(app).get(`/api/roles/${rol.id}`));
     expect(Number(anticipoDespues.body.lineas.find((l) => l.tipo_linea === 'ANTICIPO_QUINCENA').monto)).toBe(500);
+
+    // Y sincronizar después no lo vuelve a tocar.
+    const sync = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
+    expect(sync.status).toBe(200);
+    expect(sync.body.actualizadas).toBe(0);
   });
 });

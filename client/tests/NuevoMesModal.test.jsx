@@ -29,6 +29,41 @@ describe('NuevoMesModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  // Un colaborador sin contrato vigente no entra al período y hasta ahora
+  // desaparecía sin aviso. El mes se crea igual (no bloquea), pero la lista
+  // queda a la vista para poder corregir las fichas.
+  it('muestra a los omitidos y no cierra el modal cuando quedó gente afuera', async () => {
+    api.post.mockResolvedValue({
+      periodo_mes: { id: 'm1' }, quincenas: [], creados: 2,
+      omitidos: [{ id: 'c1', nombre: 'MELANIE ALVARADO', motivo: 'SIN_CONTRATO' }],
+    });
+    const onClose = vi.fn();
+    const onCreado = vi.fn();
+    render(<NuevoMesModal open={true} onClose={onClose} onCreado={onCreado} />);
+
+    fireEvent.click(screen.getByText('Crear mes'));
+
+    await screen.findByText('MELANIE ALVARADO');
+    expect(screen.getByText(/Sin sueldo cargado/)).toBeInTheDocument();
+    // El mes sí se creó: el listado de atrás se refresca igual.
+    expect(onCreado).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('cierra el aviso de omitidos al confirmar', async () => {
+    api.post.mockResolvedValue({
+      periodo_mes: { id: 'm1' }, quincenas: [], creados: 2,
+      omitidos: [{ id: 'c1', nombre: 'TAIRO ALVARADO', motivo: 'SIN_VINCULO' }],
+    });
+    const onClose = vi.fn();
+    render(<NuevoMesModal open={true} onClose={onClose} onCreado={() => {}} />);
+
+    fireEvent.click(screen.getByText('Crear mes'));
+    fireEvent.click(await screen.findByText('Entendido'));
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('muestra el error del servidor (ej. 409) sin cerrar el modal', async () => {
     api.post.mockRejectedValue(new Error('el mes 3/2022 ya tiene período padre'));
     const onClose = vi.fn();

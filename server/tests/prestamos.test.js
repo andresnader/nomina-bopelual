@@ -20,7 +20,10 @@ describe('préstamos', () => {
       await auth(request(app).post('/api/colaboradores')).send({
         tipo: 'IESS',
         nombre: 'Prestamista',
-        cedula: `P${Date.now()}`
+        cedula: `P${Date.now()}`,
+        // Fija el vínculo en el pasado: sin esto arranca hoy y el colaborador
+        // no entra al período de julio 2026 que usa el test.
+        fecha_ingreso: '2020-01-01'
       })
     ).body;
     await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
