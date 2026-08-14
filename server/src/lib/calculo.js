@@ -23,9 +23,18 @@ export function retencionProveedor(montoBruto) {
 }
 
 // --- Amortización de préstamo interno ---
+// Resto que no justifica una cuota más: si al cobrar la cuota entera quedaran
+// menos de estos centavos, la cuota los absorbe y el préstamo se cierra.
+const RESIDUO_MINIMO = 0.05;
+
 // La cuota nunca descuenta más que el saldo pendiente; al llegar a 0 se desactiva.
+// La última cuota absorbe el resto de redondeo: un préstamo cuyo monto no es
+// múltiplo exacto de la cuota (p. ej. $800 en cuotas de $133.33) dejaba una cola
+// de centavos que lo mantenía activo, y a la quincena siguiente le generaba otra
+// línea de descuento por ese resto.
 export function cuotaPrestamo(cuota, saldoPendiente) {
-  const aplicada = Math.min(cuota, saldoPendiente);
+  const restante = round2(saldoPendiente - cuota);
+  const aplicada = restante < RESIDUO_MINIMO ? saldoPendiente : cuota;
   const saldoNuevo = round2(saldoPendiente - aplicada);
   return { aplicada: round2(aplicada), saldoNuevo, activo: saldoNuevo > 0 };
 }

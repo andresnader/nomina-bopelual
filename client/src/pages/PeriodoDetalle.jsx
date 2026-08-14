@@ -11,6 +11,7 @@ import { useToast } from '../components/Toast.jsx';
 import ExportarTxtMatriz from '../components/ExportarTxtMatriz.jsx';
 import AprobacionMatriz from '../components/AprobacionMatriz.jsx';
 import OmitidosAviso from '../components/OmitidosAviso.jsx';
+import NetosEnRiesgoAviso from '../components/NetosEnRiesgoAviso.jsx';
 import { money, descargarBlob, base64ABlob, totalesPorEmpresa } from '../utils.js';
 
 const EMPRESAS = ['', 'BOPELUAL S.A.', 'CARROS-YA S.A.'];
@@ -254,6 +255,10 @@ export default function PeriodoDetalle() {
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
 
       <OmitidosAviso omitidos={omitidos} className="mb-4" />
+
+      {/* Sobre todos los roles del período, no sobre `filas`: un neto impagable
+          no debe esconderse al filtrar por empresa. */}
+      <NetosEnRiesgoAviso roles={periodo.roles_pago} />
 
       <Card className="mb-4">
         <div className="flex items-center justify-between flex-wrap gap-3">

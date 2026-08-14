@@ -30,6 +30,38 @@ describe('cuota de préstamo', () => {
   it('no descuenta más que el saldo y desactiva al saldar', () => {
     expect(calc.cuotaPrestamo(100, 60)).toEqual({ aplicada: 60, saldoNuevo: 0, activo: false });
   });
+
+  // Un préstamo cuyo monto no es múltiplo exacto de la cuota dejaba una cola de
+  // centavos que lo mantenía activo, y la quincena siguiente le generaba otra
+  // línea de descuento por ese resto. Caso real: $800 en cuotas de $133.33
+  // dejaba $0.02 vivos. La última cuota absorbe el resto y lo cierra.
+  it('la última cuota absorbe el resto de redondeo y cierra el préstamo', () => {
+    // Quedan 133.35 de un préstamo de 800 con cuota 133.33 (tras 5 cuotas).
+    expect(calc.cuotaPrestamo(133.33, 133.35)).toEqual({ aplicada: 133.35, saldoNuevo: 0, activo: false });
+  });
+
+  it('no deja saldos de centavos vivos en un préstamo de 800 con cuota 133.33', () => {
+    let saldo = 800;
+    const cobros = [];
+    // Con 6 cuotas tiene que quedar saldado; si quedara un resto, habría una 7ma.
+    for (let i = 0; i < 10 && saldo > 0; i++) {
+      const r = calc.cuotaPrestamo(133.33, saldo);
+      cobros.push(r.aplicada);
+      saldo = r.saldoNuevo;
+    }
+    expect(cobros).toHaveLength(6);
+    expect(saldo).toBe(0);
+    expect(cobros.reduce((a, b) => a + b, 0)).toBeCloseTo(800, 2);
+  });
+
+  it('sigue cobrando la cuota entera mientras el resto sea significativo', () => {
+    expect(calc.cuotaPrestamo(100, 500)).toEqual({ aplicada: 100, saldoNuevo: 400, activo: true });
+    expect(calc.cuotaPrestamo(100, 150)).toEqual({ aplicada: 100, saldoNuevo: 50, activo: true });
+  });
+
+  it('un préstamo ya saldado no genera cobro', () => {
+    expect(calc.cuotaPrestamo(133.33, 0)).toEqual({ aplicada: 0, saldoNuevo: 0, activo: false });
+  });
 });
 
 describe('anticipo quincena', () => {
