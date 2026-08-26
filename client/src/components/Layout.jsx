@@ -1,18 +1,20 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, FileText, Landmark, BarChart3, Settings, LogOut, MinusCircle, CalendarOff } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, BarChart3, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext.jsx';
 
+// Descuentos, Préstamos, Proveedores y Ausencias siguen viviendo en
+// App.jsx (rutas /descuentos, /prestamos, /proveedores, /ausencias) y su
+// funcionalidad real ya está completa dentro de la ficha de cada
+// colaborador (pestañas Descuentos/Préstamos/Anticipos/Ausencias/Facturas);
+// se retiraron del menú por decisión de producto, no por eliminación de
+// funcionalidad.
 const NAV = [
   { seccion: 'NÓMINA' },
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['ADMIN', 'RRHH', 'COLABORADOR', 'GERENCIA'] },
   { to: '/periodos', icon: CalendarDays, label: 'Períodos', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
-  { to: '/descuentos', icon: MinusCircle, label: 'Descuentos', roles: ['ADMIN', 'RRHH'] },
-  { to: '/prestamos', icon: Landmark, label: 'Préstamos', roles: ['ADMIN', 'RRHH'] },
-  { to: '/proveedores', icon: FileText, label: 'Proveedores', roles: ['ADMIN', 'RRHH'] },
   { to: '/reportes', icon: BarChart3, label: 'Reportes', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
   { seccion: 'TALENTO HUMANO' },
   { to: '/colaboradores', icon: Users, label: 'Colaboradores', roles: ['ADMIN', 'RRHH'] },
-  { to: '/ausencias', icon: CalendarOff, label: 'Ausencias', roles: ['ADMIN', 'RRHH', 'GERENCIA'] },
   { seccion: '' },
   { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['ADMIN'] }
 ];
