@@ -107,6 +107,74 @@ describe('reportes', () => {
     expect(Number(fila.neto)).toBeGreaterThan(0);
   });
 
+  it('evolución mensual filtra por empresa (vía colaboradores.empresa, no periodos.empresa)', async () => {
+    const app = createApp();
+    const bop = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `EvolBop ${Date.now()}`, cedula: `EB${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${bop.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const carros = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `EvolCarros ${Date.now()}`, cedula: `EC${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).patch(`/api/colaboradores/${carros.id}`)).send({ empresa: 'CARROS-YA S.A.' });
+    await auth(request(app).post(`/api/colaboradores/${carros.id}/contratos`)).send({
+      sueldo_base: 2000, fecha_inicio: '2026-01-01'
+    });
+    const nombrePeriodo = `evol empresa ${Date.now()}`;
+    await auth(request(app).post('/api/periodos')).send({
+      nombre: nombrePeriodo, fecha_inicio: '2027-05-16', fecha_fin: '2027-05-31', quincena: 2
+    });
+
+    const soloCarros = await auth(
+      request(app).get(`/api/reportes/evolucion-mensual?empresa=${encodeURIComponent('CARROS-YA S.A.')}`)
+    );
+    const filaCarros = soloCarros.body.find((r) => r.nombre === nombrePeriodo);
+    expect(Number(filaCarros.neto)).toBeGreaterThan(0);
+
+    const consolidado = await auth(request(app).get('/api/reportes/evolucion-mensual'));
+    const filaConsolidado = consolidado.body.find((r) => r.nombre === nombrePeriodo);
+    // Consolidado incluye BOPELUAL + CARROS-YA, así que su neto debe ser mayor
+    // que el de CARROS-YA solo.
+    expect(Number(filaConsolidado.neto)).toBeGreaterThan(Number(filaCarros.neto));
+  });
+
+  it('evolución mensual excluye los períodos MES padre (sin roles_pago propios)', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `EvolMes ${Date.now()}`, cedula: `EM${Date.now() % 1e8}`, fecha_ingreso: '2020-01-01'
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2020-01-01'
+    });
+    const wizard = await auth(request(app).post('/api/periodos/desde-mes')).send({ anio: 2021, mes: 6 });
+    expect(wizard.status).toBe(201);
+    const mesId = wizard.body.periodo_mes.id;
+    const q1Id = wizard.body.quincenas.find((q) => q.quincena === '1').id;
+
+    const res = await auth(request(app).get('/api/reportes/evolucion-mensual'));
+    expect(res.body.some((r) => r.id === mesId)).toBe(false);
+    expect(res.body.some((r) => r.id === q1Id)).toBe(true);
+  });
+
+  it('evolución mensual con empresa vacío (?empresa=) cae a consolidado', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `EvolVacio ${Date.now()}`, cedula: `EVV${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const nombrePeriodo = `evol vacio ${Date.now()}`;
+    await auth(request(app).post('/api/periodos')).send({
+      nombre: nombrePeriodo, fecha_inicio: '2027-10-16', fecha_fin: '2027-10-31', quincena: 2
+    });
+    const res = await auth(request(app).get('/api/reportes/evolucion-mensual?empresa='));
+    const fila = res.body.find((r) => r.nombre === nombrePeriodo);
+    expect(Number(fila.neto)).toBeGreaterThan(0);
+  });
+
   it('retenciones por proveedor agrupa por mes', async () => {
     const app = createApp();
     const prov = (await auth(request(app).post('/api/colaboradores')).send({

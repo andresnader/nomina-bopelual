@@ -68,20 +68,29 @@ router.get('/costo-departamento', async (req, res) => {
   res.json(rows);
 });
 
-async function evolucionMensual() {
+async function evolucionMensual(empresa) {
   const { rows } = await pool.query(
-    `SELECT p.nombre, p.fecha_inicio,
-            COALESCE(SUM(rp.total_ingresos),0) AS total_ingresos,
-            COALESCE(SUM(rp.total_descuentos),0) AS total_descuentos,
-            COALESCE(SUM(rp.neto),0) AS neto
-     FROM periodos p LEFT JOIN roles_pago rp ON rp.periodo_id=p.id
-     GROUP BY p.id ORDER BY p.fecha_inicio`
+    `SELECT p.id, p.nombre, p.fecha_inicio,
+            COALESCE(agg.total_ingresos,0) AS total_ingresos,
+            COALESCE(agg.total_descuentos,0) AS total_descuentos,
+            COALESCE(agg.neto,0) AS neto
+     FROM periodos p
+     LEFT JOIN (
+       SELECT rp.periodo_id, SUM(rp.total_ingresos) AS total_ingresos,
+              SUM(rp.total_descuentos) AS total_descuentos, SUM(rp.neto) AS neto
+       FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
+       WHERE $1::text IS NULL OR c.empresa=$1
+       GROUP BY rp.periodo_id
+     ) agg ON agg.periodo_id = p.id
+     WHERE p.tipo_periodo='QUINCENA'
+     ORDER BY p.fecha_inicio`,
+    [empresa || null]
   );
   return rows;
 }
-router.get('/evolucion-mensual', async (_req, res) => res.json(await evolucionMensual()));
-router.get('/evolucion-mensual.csv', async (_req, res) => {
-  const csv = aCsv(await evolucionMensual(), ['nombre', 'fecha_inicio', 'total_ingresos', 'total_descuentos', 'neto']);
+router.get('/evolucion-mensual', async (req, res) => res.json(await evolucionMensual(req.query.empresa)));
+router.get('/evolucion-mensual.csv', async (req, res) => {
+  const csv = aCsv(await evolucionMensual(req.query.empresa), ['nombre', 'fecha_inicio', 'total_ingresos', 'total_descuentos', 'neto']);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="evolucion-mensual.csv"');
   res.send(csv);
