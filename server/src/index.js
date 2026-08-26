@@ -26,6 +26,7 @@ import contratoEmisionesAvanzadasRouter from './routes/contrato-emisiones-avanza
 import colaboradorDocumentosRouter from './routes/colaborador-documentos.js';
 import horariosRouter from './routes/horarios.js';
 import incidenciasHorarioRouter from './routes/incidencias-horario.js';
+import horasExtrasRouter from './routes/horas-extras.js';
 import pool from './db/pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -72,6 +73,7 @@ export function createApp() {
   app.use('/api/colaboradores/:colaboradorId/documentos-emitidos', colaboradorDocumentosRouter);
   app.use('/api/horarios', horariosRouter);
   app.use('/api/colaboradores/:colaboradorId/incidencias-horario', incidenciasHorarioRouter);
+  app.use('/api/colaboradores/:colaboradorId/horas-extras', horasExtrasRouter);
   app.use('/api', usuariosRouter);
 
   // Contratos próximos a vencer

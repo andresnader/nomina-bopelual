@@ -5,5 +5,7 @@ export const TASAS = Object.freeze({
   IESS_PATRONAL: 0.1215, // aporte patronal (costo del empleador, para reportes)
   FONDOS_RESERVA: 0.0833, // 8.33% a partir del mes 13 de afiliación
   RETENCION_FUENTE: 0.1, // 10% sobre factura de proveedor externo
-  UTILIDADES: 0.15 // 15% de la utilidad líquida
+  UTILIDADES: 0.15, // 15% de la utilidad líquida
+  RECARGO_SUPLEMENTARIA: 0.5, // horas extra en día laborable
+  RECARGO_EXTRAORDINARIA: 1.0 // horas extra sábado/domingo
 });

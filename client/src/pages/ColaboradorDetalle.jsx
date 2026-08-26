@@ -1251,6 +1251,156 @@ function AusenciasTab({ col, onError }) {
   );
 }
 
+function HorasExtrasTab({ col, onCambio }) {
+  const [horasExtras, setHorasExtras] = useState([]);
+  const [form, setForm] = useState({ fecha: '', hora_entrada: '', hora_salida: '', notas: '' });
+  const [error, setError] = useState(null);
+  const toast = useToast();
+
+  const cargar = () => api.get(`/colaboradores/${col.id}/horas-extras`).then(setHorasExtras).catch((e) => setError(e.message));
+  useEffect(() => { cargar(); }, [col.id]);
+
+  const registrar = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post(`/colaboradores/${col.id}/horas-extras`, form);
+      setForm({ fecha: '', hora_entrada: '', hora_salida: '', notas: '' });
+      toast.success('Horas extras registradas.');
+      cargar();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const aplicar = async (id, rolPagoId) => {
+    if (!rolPagoId) return;
+    try {
+      await api.post(`/colaboradores/${col.id}/horas-extras/${id}/aplicar`, { rol_pago_id: rolPagoId });
+      toast.success('Horas extras aplicadas al rol de pago.');
+      cargar();
+      onCambio();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const eliminar = async (id) => {
+    try {
+      await api.del(`/colaboradores/${col.id}/horas-extras/${id}`);
+      cargar();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const rolesBorrador = col.roles_pago.filter((r) => r.periodo_estado === 'BORRADOR');
+  const badgeTipo = (t) => t === 'EXTRAORDINARIA'
+    ? <span className="badge bg-purple-100 text-purple-700">EXTRAORDINARIA 100%</span>
+    : <span className="badge bg-sky-100 text-sky-700">SUPLEMENTARIA 50%</span>;
+
+  return (
+    <div className="grid gap-4">
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <Card>
+        <h2 className="font-semibold mb-3">Registrar horas extras</h2>
+        <form onSubmit={registrar} className="grid md:grid-cols-4 gap-2">
+          <input required type="date" className="input w-full"
+            value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+          <input required type="time" placeholder="Hora entrada" className="input w-full"
+            value={form.hora_entrada} onChange={(e) => setForm({ ...form, hora_entrada: e.target.value })} />
+          <input required type="time" placeholder="Hora salida" className="input w-full"
+            value={form.hora_salida} onChange={(e) => setForm({ ...form, hora_salida: e.target.value })} />
+          <button className="btn btn-primary">Registrar</button>
+          <input placeholder="Notas (opcional)" className="input w-full md:col-span-4"
+            value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+        </form>
+        <p className="text-xs text-slate-500 mt-2">
+          Lunes a viernes se calcula como suplementaria (50%); sábado y domingo como extraordinaria (100%).
+        </p>
+      </Card>
+      <Card className="p-0 overflow-x-auto">
+        <table className="hidden md:table w-full text-sm">
+          <thead className="text-slate-500 text-left">
+            <tr className="border-b border-slate-200">
+              <th className="p-3">Fecha</th><th className="p-3">Horario</th><th className="p-3">Tipo</th>
+              <th className="p-3 text-right">Horas</th><th className="p-3 text-right">Monto</th>
+              <th className="p-3">Estado</th><th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {horasExtras.map((he) => (
+              <tr key={he.id} className="border-b border-slate-200">
+                <td className="p-3">{fecha(he.fecha)}</td>
+                <td className="p-3">{he.hora_entrada.slice(0, 5)} – {he.hora_salida.slice(0, 5)}</td>
+                <td className="p-3">{badgeTipo(he.tipo_hora)}</td>
+                <td className="p-3 text-right">{Number(he.horas)}</td>
+                <td className="p-3 text-right font-medium">{money(he.monto_total)}</td>
+                <td className="p-3">
+                  {he.lineas_rol_id
+                    ? <span className="badge bg-emerald-100 text-emerald-700">APLICADA</span>
+                    : <span className="badge bg-amber-100 text-amber-700">PENDIENTE</span>}
+                </td>
+                <td className="p-3 text-right whitespace-nowrap">
+                  {!he.lineas_rol_id && (
+                    <>
+                      <select className="input !py-1 !px-2 text-xs" defaultValue=""
+                        onChange={(e) => aplicar(he.id, e.target.value)}>
+                        <option value="">Aplicar a...</option>
+                        {rolesBorrador.map((r) => <option key={r.id} value={r.id}>{r.periodo_nombre}</option>)}
+                      </select>
+                      <button onClick={() => eliminar(he.id)} className="text-slate-400 hover:text-red-600 ml-2 align-middle" title="Eliminar">
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {horasExtras.length === 0 && <tr><td colSpan={7} className="p-4 text-slate-500">Sin horas extras registradas.</td></tr>}
+          </tbody>
+        </table>
+
+        <div className="md:hidden space-y-2 p-2">
+          {horasExtras.length === 0 && <p className="p-4 text-slate-500 text-sm">Sin horas extras registradas.</p>}
+          {horasExtras.map((he) => (
+            <MobileCard
+              key={he.id}
+              top={
+                <>
+                  <span className="font-medium text-slate-800">{fecha(he.fecha)}</span>
+                  {he.lineas_rol_id
+                    ? <span className="badge bg-emerald-100 text-emerald-700">APLICADA</span>
+                    : <span className="badge bg-amber-100 text-amber-700">PENDIENTE</span>}
+                </>
+              }
+              meta={
+                <span className="flex items-center justify-between">
+                  <span>{badgeTipo(he.tipo_hora)} · {Number(he.horas)}h</span>
+                  <span className="font-medium text-slate-700">{money(he.monto_total)}</span>
+                </span>
+              }
+              footer={
+                !he.lineas_rol_id && (
+                  <>
+                    <select className="input !py-1.5 !px-2 text-xs flex-1" defaultValue=""
+                      onChange={(e) => aplicar(he.id, e.target.value)}>
+                      <option value="">Aplicar a...</option>
+                      {rolesBorrador.map((r) => <option key={r.id} value={r.id}>{r.periodo_nombre}</option>)}
+                    </select>
+                    <button onClick={() => eliminar(he.id)} className="text-slate-400 hover:text-red-600 p-2 -m-2 shrink-0" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  </>
+                )
+              }
+            />
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function HorarioTab({ col, onError, onCambio }) {
   const [incidencias, setIncidencias] = useState([]);
   const [form, setForm] = useState({ fecha: '', hora_entrada_real: '', hora_salida_real: '', notas: '' });
@@ -1260,7 +1410,12 @@ function HorarioTab({ col, onError, onCambio }) {
   useEffect(() => { cargar(); }, [col.id]);
 
   if (!col.horario) {
-    return <Card className="text-slate-500">Este colaborador no tiene un horario asignado. Asígnalo en la pestaña Ficha.</Card>;
+    return (
+      <div className="grid gap-4">
+        <Card className="text-slate-500">Este colaborador no tiene un horario asignado. Asígnalo en la pestaña Ficha para registrar incidencias de tardanza.</Card>
+        <HorasExtrasTab col={col} onCambio={onCambio} />
+      </div>
+    );
   }
 
   const registrar = async (e) => {
@@ -1403,6 +1558,7 @@ function HorarioTab({ col, onError, onCambio }) {
           ))}
         </div>
       </Card>
+      <HorasExtrasTab col={col} onCambio={onCambio} />
     </div>
   );
 }
