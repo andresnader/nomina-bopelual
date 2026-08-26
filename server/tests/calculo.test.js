@@ -5,6 +5,10 @@ import { calcularTotales } from '../src/lib/calculo.js';
 describe('cálculos IESS', () => {
   it('aporte personal 9.45%', () => expect(calc.iessPersonal(1000)).toBe(94.5));
   it('aporte patronal 12.15%', () => expect(calc.iessPatronal(1000)).toBe(121.5));
+  it('aporte personal usa una tasa especial cuando se provee', () =>
+    expect(calc.iessPersonal(1000, 0.176)).toBe(176));
+  it('aporte personal ignora una tasa especial nula y usa la estándar', () =>
+    expect(calc.iessPersonal(1000, null)).toBe(94.5));
 });
 
 describe('fondos de reserva', () => {

@@ -1,5 +1,18 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { fecha, totalesPorEmpresa } from '../src/utils.js';
+import { fecha, totalesPorEmpresa, fraccionAPorcentaje, porcentajeAFraccion } from '../src/utils.js';
+
+describe('fraccionAPorcentaje', () => {
+  it('convierte una fracción a su porcentaje legible', () => expect(fraccionAPorcentaje(0.176)).toBe('17.6'));
+  it('nulo/vacío se muestra como cadena vacía (sin excepción)', () => {
+    expect(fraccionAPorcentaje(null)).toBe('');
+    expect(fraccionAPorcentaje(undefined)).toBe('');
+  });
+});
+
+describe('porcentajeAFraccion', () => {
+  it('convierte un porcentaje ingresado a fracción', () => expect(porcentajeAFraccion('17.6')).toBe(0.176));
+  it('cadena vacía se guarda como null (usa la tasa estándar)', () => expect(porcentajeAFraccion('')).toBe(null));
+});
 
 describe('fecha', () => {
   afterEach(() => {

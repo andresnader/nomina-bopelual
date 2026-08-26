@@ -44,6 +44,29 @@ describe('servicio de períodos', () => {
     });
   });
 
+  it('usa la tasa de IESS especial del colaborador si está configurada', async () => {
+    await withRollback(async (client) => {
+      const { usuarioId, colaboradorId } = await semilla(client);
+      await client.query(
+        `UPDATE colaboradores SET iess_tasa_personal_especial = 0.176 WHERE id=$1`,
+        [colaboradorId]
+      );
+      const p = await crearPeriodo(client, {
+        nombre: '2da julio especial', fecha_inicio: '2026-07-16', fecha_fin: '2026-07-31',
+        quincena: 2, creado_por: usuarioId
+      });
+      await generarRoles(client, p.id, { sbu: 460 });
+      const { rows } = await client.query(
+        `SELECT monto FROM lineas_rol l
+         JOIN roles_pago rp ON rp.id=l.rol_pago_id
+         WHERE rp.periodo_id=$1 AND rp.colaborador_id=$2 AND l.tipo_linea='IESS_PERSONAL'`,
+        [p.id, colaboradorId]
+      );
+      // sueldo 1000 * 17.6% = 176 (en vez de los 94.5 estándar)
+      expect(Number(rows[0].monto)).toBe(176);
+    });
+  });
+
   it('1ra quincena solo genera anticipo (sin IESS)', async () => {
     await withRollback(async (client) => {
       const { usuarioId, colaboradorId } = await semilla(client);

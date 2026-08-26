@@ -5,7 +5,8 @@ import { diasEntre } from './vacaciones.js';
 const DIAS_QUINCENA = 15;
 
 // --- Aportes IESS ---
-export const iessPersonal = (sueldoBase) => round2(sueldoBase * TASAS.IESS_PERSONAL);
+export const iessPersonal = (sueldoBase, tasaEspecial) =>
+  round2(sueldoBase * (tasaEspecial ?? TASAS.IESS_PERSONAL));
 export const iessPatronal = (sueldoBase) => round2(sueldoBase * TASAS.IESS_PATRONAL);
 
 // Fondos de reserva: solo a partir del mes 13 de afiliación.

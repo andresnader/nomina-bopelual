@@ -6,7 +6,7 @@ import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
-import { money, fecha } from '../utils.js';
+import { money, fecha, fraccionAPorcentaje, porcentajeAFraccion } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { AbonoModal, CuotaModal } from './Prestamos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
@@ -55,6 +55,7 @@ function FichaTab({ col, onGuardado, onError }) {
     acumular_decimos: col.acumular_decimos ?? true,
     acumular_fondos_reserva: col.acumular_fondos_reserva ?? false,
     extension_conyugal: col.extension_conyugal ?? false,
+    iess_tasa_personal_especial: fraccionAPorcentaje(col.iess_tasa_personal_especial),
   });
 
   const guardar = async (e) => {
@@ -64,6 +65,7 @@ function FichaTab({ col, onGuardado, onError }) {
         ...form,
         cargas_personales: Number(form.cargas_personales) || 0,
         pct_anticipo: form.pct_anticipo === '' ? null : Number(form.pct_anticipo),
+        iess_tasa_personal_especial: porcentajeAFraccion(form.iess_tasa_personal_especial),
         fecha_nacimiento: form.fecha_nacimiento || null,
         sexo: form.sexo || null,
         estado_civil: form.estado_civil || null,
@@ -185,6 +187,12 @@ function FichaTab({ col, onGuardado, onError }) {
               checked={form.extension_conyugal}
               onChange={(e) => setForm({ ...form, extension_conyugal: e.target.checked })} />
             Extensión conyugal (10% adicional IESS)
+          </label>
+          <label className="text-sm text-slate-600">Tasa IESS personal especial (%)
+            <input type="number" step="0.01" min="0" max="99" className="input w-full"
+              value={form.iess_tasa_personal_especial}
+              onChange={(e) => setForm({ ...form, iess_tasa_personal_especial: e.target.value })}
+              placeholder="Vacío = estándar 9.45%" />
           </label>
         </div>
       </Card>

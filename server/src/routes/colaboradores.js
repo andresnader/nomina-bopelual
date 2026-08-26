@@ -201,7 +201,8 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     'empresa', 'centro_costo', 'cargas_personales', 'forma_pago', 'clasificacion',
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
-    'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal'
+    'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal',
+    'iess_tasa_personal_especial'
   ];
   if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
   // `tipo` decide el porcentaje de la quincena, si se prorratea y si le tocan
@@ -229,10 +230,10 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     if (tocaFechas) {
       await sincronizarFechasDerivadas(client, req.params.id);
     }
-    // `tipo` y `pct_anticipo` cambian el monto de las líneas igual que las
-    // fechas: sin reconciliar, la ficha muestra el valor nuevo y la quincena
-    // en BORRADOR se queda con el cálculo viejo.
-    if (tocaFechas || 'tipo' in req.body || 'pct_anticipo' in req.body) {
+    // `tipo`, `pct_anticipo` e `iess_tasa_personal_especial` cambian el monto
+    // de las líneas igual que las fechas: sin reconciliar, la ficha muestra
+    // el valor nuevo y la quincena en BORRADOR se queda con el cálculo viejo.
+    if (tocaFechas || 'tipo' in req.body || 'pct_anticipo' in req.body || 'iess_tasa_personal_especial' in req.body) {
       await reconciliarColaboradorEnPeriodosBorrador(client, req.params.id);
     }
     const { rows } = await client.query('SELECT * FROM colaboradores WHERE id=$1', [req.params.id]);

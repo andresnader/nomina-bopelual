@@ -102,7 +102,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
       });
     }
     if (col.tipo === 'IESS') {
-      await aplicar({ tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo) });
+      await aplicar({ tipo: 'IESS_PERSONAL', clase: 'DESCUENTO', monto: calc.iessPersonal(sueldo, col.iess_tasa_personal_especial) });
       await aplicar({ tipo: 'DECIMO_TERCERO', clase: 'INGRESO', monto: calc.decimoTercero(sueldo) });
       await aplicar({ tipo: 'DECIMO_CUARTO', clase: 'INGRESO', monto: calc.decimoCuarto(sbu) });
       await aplicar({ tipo: 'FONDOS_RESERVA', clase: 'INGRESO', monto: calc.fondosReserva(sueldo, 999), desc: 'Fondos de reserva' });
@@ -147,7 +147,7 @@ async function aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGloba
 export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quincena, periodoFechaInicio, periodoFechaFin) {
   // Obtener datos del colaborador y su contrato vigente.
   const { rows } = await client.query(
-    `SELECT c.id, c.tipo, c.pct_anticipo, c.fecha_ingreso, c.fecha_salida, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
+    `SELECT c.id, c.tipo, c.pct_anticipo, c.iess_tasa_personal_especial, c.fecha_ingreso, c.fecha_salida, ct.sueldo_base, COALESCE(ct.bono, 0) AS bono
      FROM colaboradores c
      JOIN contratos ct ON ct.colaborador_id=c.id AND ct.fecha_fin IS NULL
      WHERE c.id=$1`,

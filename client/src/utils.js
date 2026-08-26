@@ -31,6 +31,12 @@ export function totalesPorEmpresa(filas) {
     .sort((a, b) => a.empresa.localeCompare(b.empresa, 'es'));
 }
 
+// Los overrides de tasa (ej. iess_tasa_personal_especial) se guardan como
+// fracción (0.176) pero se editan como porcentaje (17.6) para que RRHH no
+// tenga que hacer la cuenta a mano.
+export const fraccionAPorcentaje = (f) => (f == null ? '' : String(Math.round(Number(f) * 10000) / 100));
+export const porcentajeAFraccion = (pct) => (pct === '' ? null : Math.round(Number(pct) * 100) / 10000);
+
 export function descargarBlob(nombre, blob) {
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: nombre });
