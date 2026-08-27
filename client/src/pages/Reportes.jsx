@@ -5,6 +5,29 @@ import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
+import { LineChart, Line, ComposedChart, Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Formato compacto para ejes de gráficas (ej. "$45,2 k") — money() completo se
+// reserva para tooltips y tablas, donde el valor exacto importa.
+const moneyCompacto = (n) =>
+  new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(Number(n || 0));
+
+// Postgres numeric/bigint llegan como string vía pg (sin type parser custom).
+// Recharts calcula dominios de eje con comparaciones lexicográficas si no son
+// number, así que coercionamos apenas llega la respuesta, no más abajo en el render.
+const aNumero = (filas, campos) =>
+  filas.map((f) => ({ ...f, ...Object.fromEntries(campos.map((c) => [c, Number(f[c])])) }));
+
+// Estilo compartido de tooltip/leyenda para las 4 gráficas ejecutivas, para que
+// se lean como un mismo sistema en vez de widgets sueltos (mismo look que .card).
+const chartTooltipStyle = {
+  contentStyle: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0.75rem', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)', fontSize: 12, padding: '8px 12px' },
+  labelStyle: { color: '#0f172a', fontWeight: 600, marginBottom: 4 },
+  itemStyle: { padding: 0 },
+};
+const chartLegendStyle = { fontSize: 12, color: '#475569', paddingTop: 8 };
+const chartAxisTick = { fontSize: 11, fill: '#64748b' };
+const chartGridColor = '#e2e8f0';
 
 function descargar(path, nombreArchivo) {
   return async () => {
@@ -54,13 +77,205 @@ export default function Reportes() {
     api.get(`/reportes/decimos-periodo?periodo_id=${periodoDecimos}`).then(setDecimosPeriodo).catch(() => setDecimosPeriodo([]));
   }, [periodoDecimos]);
 
+  const [empresaFiltro, setEmpresaFiltro] = useState('');
+  const [evolucionEjecutiva, setEvolucionEjecutiva] = useState([]);
+  const [headcount, setHeadcount] = useState([]);
+  const [horasExtrasEvol, setHorasExtrasEvol] = useState([]);
+  const [periodoDesglose, setPeriodoDesglose] = useState('');
+  const [desglose, setDesglose] = useState([]);
+
+  useEffect(() => {
+    const q = empresaFiltro ? `?empresa=${encodeURIComponent(empresaFiltro)}` : '';
+    api.get(`/reportes/evolucion-mensual${q}`)
+      .then((d) => setEvolucionEjecutiva(aNumero(d, ['total_ingresos', 'total_descuentos', 'neto'])))
+      .catch(() => setEvolucionEjecutiva([]));
+    api.get(`/reportes/headcount-evolucion${q}`)
+      .then((d) => setHeadcount(aNumero(d, ['activos', 'altas', 'bajas'])))
+      .catch(() => setHeadcount([]));
+    api.get(`/reportes/horas-extras-evolucion${q}`)
+      .then((d) => setHorasExtrasEvol(aNumero(d, ['suplementarias', 'extraordinarias'])))
+      .catch(() => setHorasExtrasEvol([]));
+  }, [empresaFiltro]);
+
+  useEffect(() => {
+    if (!periodoDesglose) return setDesglose([]);
+    const q = empresaFiltro ? `&empresa=${encodeURIComponent(empresaFiltro)}` : '';
+    api.get(`/reportes/desglose-rubros?periodo_id=${periodoDesglose}${q}`)
+      .then((d) => setDesglose(aNumero(d, ['total'])))
+      .catch(() => setDesglose([]));
+  }, [periodoDesglose, empresaFiltro]);
+
   const periodosCerrados = periodos.filter((p) => p.estado === 'CERRADO');
 
   const maxNeto = Math.max(...evolucion.map((e) => Number(e.neto)), 1);
 
+  // Query strings de la capa ejecutiva, reusados tanto por los fetches de arriba
+  // como por los botones de descarga CSV, para que el archivo descargado coincida
+  // siempre con lo que está en pantalla.
+  const qEmpresaExec = empresaFiltro ? `?empresa=${encodeURIComponent(empresaFiltro)}` : '';
+  const qDesglose = periodoDesglose
+    ? `?periodo_id=${periodoDesglose}${empresaFiltro ? `&empresa=${encodeURIComponent(empresaFiltro)}` : ''}`
+    : '';
+
+  // Rotación del último período (bajas / activos * 100), con guarda de división por cero.
+  const ultimoHeadcount = headcount[headcount.length - 1];
+  const rotacionUltima = ultimoHeadcount && ultimoHeadcount.activos !== 0
+    ? (ultimoHeadcount.bajas / ultimoHeadcount.activos) * 100
+    : null;
+
+  // El backend agrupa por (tipo_linea, clase), así que un mismo tipo_linea puede
+  // venir dos veces (INGRESO y DESCUENTO). Pivotamos a un objeto por tipo_linea con
+  // una columna por clase para que ninguna de las dos barras tape a la otra.
+  const desglosePorTipo = (() => {
+    const porTipo = new Map();
+    for (const d of desglose) {
+      const fila = porTipo.get(d.tipo_linea) || { tipo_linea: d.tipo_linea, ingreso: 0, descuento: 0 };
+      if (d.clase === 'INGRESO') fila.ingreso = d.total;
+      else fila.descuento = d.total;
+      porTipo.set(d.tipo_linea, fila);
+    }
+    return [...porTipo.values()];
+  })();
+
   return (
     <div className="animate-fade-in">
       <PageTitle>Reportes</PageTitle>
+
+      <div className="mb-4">
+        <p className="table-header mb-2">Panorama ejecutivo</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <p className="text-sm text-muted max-w-md">
+            Tendencias de costo, headcount y horas extras a lo largo del tiempo — filtra por empresa o mira el consolidado.
+          </p>
+          <div>
+            <label htmlFor="empresaFiltro" className="label">Empresa</label>
+            <select id="empresaFiltro" value={empresaFiltro} onChange={(e) => setEmpresaFiltro(e.target.value)} className="input w-56">
+              <option value="">Todas (consolidado)</option>
+              <option>BOPELUAL S.A.</option>
+              <option>CARROS-YA S.A.</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        <Card>
+          <h2 className="font-display font-bold mb-1">Costo de nómina en el tiempo</h2>
+          <p className="text-sm text-muted mb-3">Ingresos, descuentos y neto por período — todo el histórico.</p>
+          {evolucionEjecutiva.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center">
+              <p className="text-sm text-slate-400">Sin períodos generados aún.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={evolucionEjecutiva} margin={{ bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
+                <XAxis dataKey="nombre" tick={chartAxisTick} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} angle={-20} textAnchor="end" height={55} />
+                <YAxis tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={moneyCompacto} width={64} />
+                <Tooltip {...chartTooltipStyle} formatter={(v) => money(v)} />
+                <Legend wrapperStyle={chartLegendStyle} iconType="circle" iconSize={8} />
+                <Line type="monotone" dataKey="total_ingresos" name="Ingresos" stroke="#059669" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="total_descuentos" name="Descuentos" stroke="#dc2626" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="neto" name="Neto" stroke="#d49a0f" strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <h2 className="font-display font-bold">Headcount y rotación</h2>
+            <span className="text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-1 whitespace-nowrap">
+              Rotación último período: {rotacionUltima === null ? 'N/D' : `${rotacionUltima.toFixed(1)}%`}
+            </span>
+          </div>
+          <p className="text-sm text-muted mb-3">Activos, altas y bajas por período, desde los vínculos de empleo.</p>
+          <div className="flex justify-end mb-2">
+            <button onClick={descargar(`/reportes/headcount-evolucion.csv${qEmpresaExec}`, 'headcount-evolucion.csv')} className="btn btn-secondary text-xs">
+              Descargar CSV
+            </button>
+          </div>
+          {headcount.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center">
+              <p className="text-sm text-slate-400">Sin períodos generados aún.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={headcount} margin={{ bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
+                <XAxis dataKey="nombre" tick={chartAxisTick} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} angle={-20} textAnchor="end" height={55} />
+                <YAxis tick={chartAxisTick} axisLine={false} tickLine={false} allowDecimals={false} width={36} />
+                <Tooltip {...chartTooltipStyle} />
+                <Legend wrapperStyle={chartLegendStyle} iconType="circle" iconSize={8} />
+                <Bar dataKey="altas" name="Altas" fill="#059669" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="bajas" name="Bajas" fill="#dc2626" radius={[3, 3, 0, 0]} />
+                <Line type="monotone" dataKey="activos" name="Activos" stroke="#0f172a" strokeWidth={2.5} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        <Card>
+          <h2 className="font-display font-bold mb-1">Costo de horas extras</h2>
+          <p className="text-sm text-muted mb-3">Suplementarias (50%) vs. extraordinarias (100%) ya aplicadas a nómina, por período.</p>
+          <div className="flex justify-end mb-2">
+            <button onClick={descargar(`/reportes/horas-extras-evolucion.csv${qEmpresaExec}`, 'horas-extras-evolucion.csv')} className="btn btn-secondary text-xs">
+              Descargar CSV
+            </button>
+          </div>
+          {horasExtrasEvol.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center">
+              <p className="text-sm text-slate-400">Sin horas extras aplicadas aún.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={horasExtrasEvol} margin={{ bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} vertical={false} />
+                <XAxis dataKey="nombre" tick={chartAxisTick} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} angle={-20} textAnchor="end" height={55} />
+                <YAxis tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={moneyCompacto} width={64} />
+                <Tooltip {...chartTooltipStyle} formatter={(v) => money(v)} />
+                <Legend wrapperStyle={chartLegendStyle} iconType="circle" iconSize={8} />
+                <Bar dataKey="suplementarias" name="Suplementaria (50%)" stackId="he" fill="#0ea5e9" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="extraordinarias" name="Extraordinaria (100%)" stackId="he" fill="#7c3aed" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        <Card>
+          <h2 className="font-display font-bold mb-1">Desglose de rubros de un período</h2>
+          <p className="text-sm text-muted mb-3">Composición del costo (IESS, décimos, fondos, horas extras, rubros...) de un período ya cerrado.</p>
+          <div className="flex gap-2 flex-wrap mb-3">
+            <select value={periodoDesglose} onChange={(e) => setPeriodoDesglose(e.target.value)} className="input flex-1 min-w-48">
+              <option value="">Elige un período cerrado</option>
+              {periodosCerrados.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            <button onClick={descargar(`/reportes/desglose-rubros.csv${qDesglose}`, `desglose-rubros-${periodoDesglose}.csv`)}
+              disabled={!periodoDesglose} className="btn btn-primary disabled:opacity-40">
+              Descargar CSV
+            </button>
+          </div>
+          {desglose.length === 0 ? (
+            <div className="h-[240px] flex items-center justify-center">
+              <p className="text-sm text-slate-400">{periodoDesglose ? 'Sin rubros en este período.' : 'Elige un período para ver el desglose.'}</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={desglosePorTipo} layout="vertical" margin={{ bottom: 8, left: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} horizontal={false} />
+                <XAxis type="number" tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={moneyCompacto} />
+                <YAxis type="category" dataKey="tipo_linea" tick={chartAxisTick} axisLine={false} tickLine={false} width={140} />
+                <Tooltip {...chartTooltipStyle} formatter={(v) => money(v)} />
+                <Legend wrapperStyle={chartLegendStyle} iconType="circle" iconSize={8} />
+                <Bar dataKey="ingreso" name="Ingreso" fill="#059669" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="descuento" name="Descuento" fill="#dc2626" radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+      </div>
+
+      <p className="table-header mb-2">Reportes operativos</p>
 
       <Card className="mb-4">
         <h2 className="font-display font-bold mb-1">Costo de nómina por período</h2>
