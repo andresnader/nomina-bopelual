@@ -324,4 +324,34 @@ describe('reportes', () => {
     expect(Number(filaCarros.activos)).toBeGreaterThanOrEqual(1);
     expect(Number(filaConsolidado.activos)).toBeGreaterThan(Number(filaCarros.activos));
   });
+
+  it('horas extras evolución solo cuenta las aplicadas, separadas por tipo', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `HExtraEvol ${Date.now()}`, cedula: `HX${Date.now() % 1e8}`, fecha_ingreso: '2020-01-01'
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2020-01-01'
+    });
+    // Pendiente (lunes, suplementaria): nunca se aplica, no debe contar.
+    await auth(request(app).post(`/api/colaboradores/${col.id}/horas-extras`))
+      .send({ fecha: '2027-06-14', hora_entrada: '17:30', hora_salida: '19:30' });
+    // Se aplica (sábado, extraordinaria): sí debe contar.
+    const aAplicar = (await auth(request(app).post(`/api/colaboradores/${col.id}/horas-extras`))
+      .send({ fecha: '2027-06-19', hora_entrada: '08:00', hora_salida: '10:00' })).body;
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `hextra evol ${Date.now()}`, fecha_inicio: '2027-06-16', fecha_fin: '2027-06-30', quincena: 2
+    });
+    const periodoId = per.body.periodo.id;
+    const det = await auth(request(app).get(`/api/periodos/${periodoId}`));
+    const rol = det.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    await auth(request(app).post(`/api/colaboradores/${col.id}/horas-extras/${aAplicar.id}/aplicar`))
+      .send({ rol_pago_id: rol.id });
+
+    const res = await auth(request(app).get('/api/reportes/horas-extras-evolucion'));
+    const fila = res.body.find((r) => r.id === periodoId);
+    expect(Number(fila.extraordinarias)).toBeCloseTo(Number(aAplicar.monto_total), 2);
+    expect(Number(fila.suplementarias)).toBe(0);
+  });
 });

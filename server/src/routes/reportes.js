@@ -125,6 +125,37 @@ router.get('/headcount-evolucion.csv', async (req, res) => {
   res.send(csv);
 });
 
+async function horasExtrasEvolucion(empresa) {
+  const { rows } = await pool.query(
+    `SELECT p.id, p.nombre, p.fecha_inicio,
+            COALESCE(agg.suplementarias,0) AS suplementarias,
+            COALESCE(agg.extraordinarias,0) AS extraordinarias
+     FROM periodos p
+     LEFT JOIN (
+       SELECT rp.periodo_id,
+         SUM(he.monto_total) FILTER (WHERE he.tipo_hora='SUPLEMENTARIA') AS suplementarias,
+         SUM(he.monto_total) FILTER (WHERE he.tipo_hora='EXTRAORDINARIA') AS extraordinarias
+       FROM horas_extras he
+       JOIN lineas_rol lr ON lr.id = he.lineas_rol_id
+       JOIN roles_pago rp ON rp.id = lr.rol_pago_id
+       JOIN colaboradores c ON c.id = rp.colaborador_id
+       WHERE $1::text IS NULL OR c.empresa=$1
+       GROUP BY rp.periodo_id
+     ) agg ON agg.periodo_id = p.id
+     WHERE p.tipo_periodo='QUINCENA'
+     ORDER BY p.fecha_inicio`,
+    [empresa || null]
+  );
+  return rows;
+}
+router.get('/horas-extras-evolucion', async (req, res) => res.json(await horasExtrasEvolucion(req.query.empresa)));
+router.get('/horas-extras-evolucion.csv', async (req, res) => {
+  const csv = aCsv(await horasExtrasEvolucion(req.query.empresa), ['nombre', 'fecha_inicio', 'suplementarias', 'extraordinarias']);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="horas-extras-evolucion.csv"');
+  res.send(csv);
+});
+
 async function retencionesProveedor() {
   const { rows } = await pool.query(
     `SELECT c.nombre AS proveedor, date_trunc('month', f.fecha_factura)::date AS mes,
