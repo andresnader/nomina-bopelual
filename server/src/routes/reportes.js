@@ -241,6 +241,38 @@ router.get('/decimos-periodo.csv', async (req, res) => {
   res.send(csv);
 });
 
+async function desgloseRubros(periodoId, empresa) {
+  const { rows } = await pool.query(
+    `SELECT l.tipo_linea, l.clase, COALESCE(SUM(l.monto),0) AS total
+     FROM lineas_rol l
+     JOIN roles_pago rp ON rp.id = l.rol_pago_id
+     JOIN colaboradores c ON c.id = rp.colaborador_id
+     WHERE rp.periodo_id=$1 AND ($2::text IS NULL OR c.empresa=$2)
+     GROUP BY l.tipo_linea, l.clase
+     ORDER BY l.clase, total DESC`,
+    [periodoId, empresa || null]
+  );
+  return rows;
+}
+
+router.get('/desglose-rubros', async (req, res) => {
+  const { periodo_id, empresa } = req.query;
+  if (!periodo_id) return res.status(400).json({ error: 'periodo_id requerido' });
+  const err = await periodoCerrado(periodo_id);
+  if (err) return res.status(err.codigo).json({ error: err.mensaje });
+  res.json(await desgloseRubros(periodo_id, empresa));
+});
+router.get('/desglose-rubros.csv', async (req, res) => {
+  const { periodo_id, empresa } = req.query;
+  if (!periodo_id) return res.status(400).json({ error: 'periodo_id requerido' });
+  const err = await periodoCerrado(periodo_id);
+  if (err) return res.status(err.codigo).json({ error: err.mensaje });
+  const csv = aCsv(await desgloseRubros(periodo_id, empresa), ['tipo_linea', 'clase', 'total']);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="desglose-rubros-${periodo_id}.csv"`);
+  res.send(csv);
+});
+
 router.get('/documentos-faltantes', async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT c.id, c.nombre, c.tipo, c.empresa

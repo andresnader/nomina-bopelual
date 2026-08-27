@@ -354,4 +354,47 @@ describe('reportes', () => {
     expect(Number(fila.extraordinarias)).toBeCloseTo(Number(aAplicar.monto_total), 2);
     expect(Number(fila.suplementarias)).toBe(0);
   });
+
+  it('desglose de rubros totaliza por tipo_linea en un período cerrado', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `Desglose ${Date.now()}`, cedula: `DG${Date.now() % 1e8}`
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1200, fecha_inicio: '2026-01-01'
+    });
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `desglose test ${Date.now()}`, fecha_inicio: '2027-08-16', fecha_fin: '2027-08-31', quincena: 2
+    });
+    const periodoId = per.body.periodo.id;
+
+    await pool.query(`UPDATE usuarios SET rol='RRHH' WHERE email='admin@bopelual.com'`);
+    await auth(request(app).post(`/api/periodos/${periodoId}/aprobar`));
+    await auth(request(app).post(`/api/periodos/${periodoId}/cerrar`));
+
+    const res = await auth(request(app).get(`/api/reportes/desglose-rubros?periodo_id=${periodoId}`));
+    expect(res.status).toBe(200);
+    const iess = res.body.find((r) => r.tipo_linea === 'IESS_PERSONAL');
+    expect(iess.clase).toBe('DESCUENTO');
+    // >= (no ===): otros colaboradores activos en ese rango también podrían
+    // haber generado rol en este período — el aporte de éste es un piso.
+    expect(Number(iess.total)).toBeGreaterThanOrEqual(1200 * 0.0945 - 0.01);
+    const decimo3 = res.body.find((r) => r.tipo_linea === 'DECIMO_TERCERO');
+    expect(Number(decimo3.total)).toBeGreaterThanOrEqual(1200 / 12 - 0.01);
+  });
+
+  it('desglose de rubros rechaza un período que no está CERRADO', async () => {
+    const app = createApp();
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `desglose borrador ${Date.now()}`, fecha_inicio: '2027-09-16', fecha_fin: '2027-09-30', quincena: 2
+    });
+    const res = await auth(request(app).get(`/api/reportes/desglose-rubros?periodo_id=${per.body.periodo.id}`));
+    expect(res.status).toBe(400);
+  });
+
+  it('desglose de rubros requiere periodo_id', async () => {
+    const app = createApp();
+    const res = await auth(request(app).get('/api/reportes/desglose-rubros'));
+    expect(res.status).toBe(400);
+  });
 });
