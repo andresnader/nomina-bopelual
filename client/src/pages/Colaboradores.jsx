@@ -28,6 +28,7 @@ export default function Colaboradores() {
   const [sort, setSort] = useState('nombre');
   const [order, setOrder] = useState('asc');
   const [q, setQ] = useState('');
+  const [filtroActivo, setFiltroActivo] = useState('true');
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -38,6 +39,7 @@ export default function Colaboradores() {
     try {
       const params = new URLSearchParams({ sort, order, page: pagina, per_page: porPagina });
       if (q) params.set('q', q);
+      if (filtroActivo) params.set('activo', filtroActivo);
       const res = await api.get('/colaboradores?' + params.toString());
       setData(res.data);
       setTotal(res.total);
@@ -46,7 +48,7 @@ export default function Colaboradores() {
     } finally {
       setCargando(false);
     }
-  }, [pagina, porPagina, sort, order, q]);
+  }, [pagina, porPagina, sort, order, q, filtroActivo]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -163,7 +165,7 @@ export default function Colaboradores() {
         </Card>
       )}
 
-      {/* Buscador + paginación superior */}
+      {/* Buscador + filtro activo + paginación superior */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -176,6 +178,15 @@ export default function Colaboradores() {
           />
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
+          <select
+            value={filtroActivo}
+            onChange={(e) => { setFiltroActivo(e.target.value); setPagina(1); }}
+            className="input py-1.5 text-sm"
+          >
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+            <option value="">Todos</option>
+          </select>
           <span className="hidden sm:inline">{total} colaboradores</span>
           <select
             value={porPagina}
@@ -224,11 +235,12 @@ export default function Colaboradores() {
               </tr>
             ) : (
               data.map((c) => (
-                <tr key={c.id} className="border-b border-slate-200 hover:bg-slate-50">
+                <tr key={c.id} className={`border-b border-slate-200 hover:bg-slate-50 ${!c.activo && 'opacity-50'}`}>
                   <td className="p-3">
                     <Link to={`/colaboradores/${c.id}`} className="text-gold-600 font-medium hover:underline">
                       {c.nombre}
                     </Link>
+                    {!c.activo && <span className="badge bg-red-100 text-red-700 ml-2 text-[10px]">INACTIVO</span>}
                   </td>
                   <td className="p-3"><Badge estado={c.tipo} /></td>
                   <td className="p-3">{c.empresa || '—'}</td>
@@ -251,10 +263,12 @@ export default function Colaboradores() {
             data.map((c) => (
               <MobileCard
                 key={c.id}
+                className={!c.activo ? 'opacity-50' : ''}
                 top={
                   <>
                     <Link to={`/colaboradores/${c.id}`} className="text-gold-600 font-medium hover:underline">{c.nombre}</Link>
                     <Badge estado={c.tipo} />
+                    {!c.activo && <span className="badge bg-red-100 text-red-700 ml-1 text-[10px]">INACTIVO</span>}
                   </>
                 }
                 meta={`${c.empresa || '—'} · ${c.departamento || '—'} · Ingreso: ${fecha(c.fecha_ingreso)}`}

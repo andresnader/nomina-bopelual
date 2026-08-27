@@ -492,6 +492,19 @@ export async function reconciliarColaboradorEnPeriodosBorrador(client, colaborad
   if (col.length === 0) return;
   const c = col[0];
 
+  // Colaborador inactivo: eliminar su rol de TODOS los períodos en BORRADOR
+  // (no debe aparecer en ninguna quincena mientras esté inactivo).
+  if (!c.activo) {
+    const { rows: periodos } = await client.query(
+      `SELECT * FROM periodos WHERE estado='BORRADOR' AND tipo_periodo='QUINCENA' ORDER BY fecha_inicio FOR UPDATE`);
+    for (const periodo of periodos) {
+      const { rows: rolExistente } = await client.query(
+        'SELECT id FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2', [periodo.id, colaboradorId]);
+      if (rolExistente.length > 0) await eliminarRol(client, rolExistente[0].id);
+    }
+    return;
+  }
+
   const { rows: paramRows } = await client.query(
     `SELECT clave, valor FROM parametros WHERE clave IN ('SBU','PORCENTAJE_ANTICIPO','PORCENTAJE_ANTICIPO_EXTERNO')`);
   const params = Object.fromEntries(paramRows.map((r) => [r.clave, r.valor]));

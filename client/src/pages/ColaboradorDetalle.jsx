@@ -1986,7 +1986,31 @@ export default function ColaboradorDetalle() {
     <div className="animate-fade-in">
       <PageTitle volver={{ to: '/colaboradores', label: 'Volver a Colaboradores' }}>
         {col.nombre} <Badge estado={col.tipo} />
+        {!col.activo && <span className="badge bg-red-100 text-red-700 ml-1">INACTIVO</span>}
         {col.empresa && <span className="badge bg-slate-100 text-slate-600 ml-1">{col.empresa}</span>}
+        <button
+          type="button"
+          className={`ml-3 text-xs px-3 py-1 rounded-full font-medium transition-colors ${
+            col.activo
+              ? 'bg-red-50 text-red-600 hover:bg-red-100'
+              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+          }`}
+          onClick={async () => {
+            const accion = col.activo ? 'inactivar' : 'activar';
+            const msg = col.activo
+              ? '¿Inactivar a este colaborador? Se eliminará de todas las quincenas en BORRADOR.'
+              : '¿Reactivar a este colaborador? Se agregará a las quincenas en BORRADOR que correspondan.';
+            if (!window.confirm(msg)) return;
+            try {
+              await api.patch(`/colaboradores/${col.id}`, { activo: !col.activo });
+              cargar();
+            } catch (err) {
+              setError(err.message);
+            }
+          }}
+        >
+          {col.activo ? '⏸ Inactivar' : '▶ Activar'}
+        </button>
       </PageTitle>
       {error && <Card className="mb-4 text-red-600">{error}</Card>}
 

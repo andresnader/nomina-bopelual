@@ -233,7 +233,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     // `tipo`, `pct_anticipo` e `iess_tasa_personal_especial` cambian el monto
     // de las líneas igual que las fechas: sin reconciliar, la ficha muestra
     // el valor nuevo y la quincena en BORRADOR se queda con el cálculo viejo.
-    if (tocaFechas || 'tipo' in req.body || 'pct_anticipo' in req.body || 'iess_tasa_personal_especial' in req.body) {
+    if (tocaFechas || 'tipo' in req.body || 'pct_anticipo' in req.body || 'iess_tasa_personal_especial' in req.body || 'activo' in req.body) {
       await reconciliarColaboradorEnPeriodosBorrador(client, req.params.id);
     }
     const { rows } = await client.query('SELECT * FROM colaboradores WHERE id=$1', [req.params.id]);
