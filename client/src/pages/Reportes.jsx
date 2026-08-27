@@ -12,6 +12,12 @@ import { LineChart, Line, ComposedChart, Bar, BarChart, XAxis, YAxis, CartesianG
 const moneyCompacto = (n) =>
   new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(Number(n || 0));
 
+// Postgres numeric/bigint llegan como string vía pg (sin type parser custom).
+// Recharts calcula dominios de eje con comparaciones lexicográficas si no son
+// number, así que coercionamos apenas llega la respuesta, no más abajo en el render.
+const aNumero = (filas, campos) =>
+  filas.map((f) => ({ ...f, ...Object.fromEntries(campos.map((c) => [c, Number(f[c])])) }));
+
 // Estilo compartido de tooltip/leyenda para las 4 gráficas ejecutivas, para que
 // se lean como un mismo sistema en vez de widgets sueltos (mismo look que .card).
 const chartTooltipStyle = {
@@ -80,20 +86,56 @@ export default function Reportes() {
 
   useEffect(() => {
     const q = empresaFiltro ? `?empresa=${encodeURIComponent(empresaFiltro)}` : '';
-    api.get(`/reportes/evolucion-mensual${q}`).then(setEvolucionEjecutiva).catch(() => setEvolucionEjecutiva([]));
-    api.get(`/reportes/headcount-evolucion${q}`).then(setHeadcount).catch(() => setHeadcount([]));
-    api.get(`/reportes/horas-extras-evolucion${q}`).then(setHorasExtrasEvol).catch(() => setHorasExtrasEvol([]));
+    api.get(`/reportes/evolucion-mensual${q}`)
+      .then((d) => setEvolucionEjecutiva(aNumero(d, ['total_ingresos', 'total_descuentos', 'neto'])))
+      .catch(() => setEvolucionEjecutiva([]));
+    api.get(`/reportes/headcount-evolucion${q}`)
+      .then((d) => setHeadcount(aNumero(d, ['activos', 'altas', 'bajas'])))
+      .catch(() => setHeadcount([]));
+    api.get(`/reportes/horas-extras-evolucion${q}`)
+      .then((d) => setHorasExtrasEvol(aNumero(d, ['suplementarias', 'extraordinarias'])))
+      .catch(() => setHorasExtrasEvol([]));
   }, [empresaFiltro]);
 
   useEffect(() => {
     if (!periodoDesglose) return setDesglose([]);
     const q = empresaFiltro ? `&empresa=${encodeURIComponent(empresaFiltro)}` : '';
-    api.get(`/reportes/desglose-rubros?periodo_id=${periodoDesglose}${q}`).then(setDesglose).catch(() => setDesglose([]));
+    api.get(`/reportes/desglose-rubros?periodo_id=${periodoDesglose}${q}`)
+      .then((d) => setDesglose(aNumero(d, ['total'])))
+      .catch(() => setDesglose([]));
   }, [periodoDesglose, empresaFiltro]);
 
   const periodosCerrados = periodos.filter((p) => p.estado === 'CERRADO');
 
   const maxNeto = Math.max(...evolucion.map((e) => Number(e.neto)), 1);
+
+  // Query strings de la capa ejecutiva, reusados tanto por los fetches de arriba
+  // como por los botones de descarga CSV, para que el archivo descargado coincida
+  // siempre con lo que está en pantalla.
+  const qEmpresaExec = empresaFiltro ? `?empresa=${encodeURIComponent(empresaFiltro)}` : '';
+  const qDesglose = periodoDesglose
+    ? `?periodo_id=${periodoDesglose}${empresaFiltro ? `&empresa=${encodeURIComponent(empresaFiltro)}` : ''}`
+    : '';
+
+  // Rotación del último período (bajas / activos * 100), con guarda de división por cero.
+  const ultimoHeadcount = headcount[headcount.length - 1];
+  const rotacionUltima = ultimoHeadcount && ultimoHeadcount.activos !== 0
+    ? (ultimoHeadcount.bajas / ultimoHeadcount.activos) * 100
+    : null;
+
+  // El backend agrupa por (tipo_linea, clase), así que un mismo tipo_linea puede
+  // venir dos veces (INGRESO y DESCUENTO). Pivotamos a un objeto por tipo_linea con
+  // una columna por clase para que ninguna de las dos barras tape a la otra.
+  const desglosePorTipo = (() => {
+    const porTipo = new Map();
+    for (const d of desglose) {
+      const fila = porTipo.get(d.tipo_linea) || { tipo_linea: d.tipo_linea, ingreso: 0, descuento: 0 };
+      if (d.clase === 'INGRESO') fila.ingreso = d.total;
+      else fila.descuento = d.total;
+      porTipo.set(d.tipo_linea, fila);
+    }
+    return [...porTipo.values()];
+  })();
 
   return (
     <div className="animate-fade-in">
@@ -141,8 +183,18 @@ export default function Reportes() {
         </Card>
 
         <Card>
-          <h2 className="font-display font-bold mb-1">Headcount y rotación</h2>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <h2 className="font-display font-bold">Headcount y rotación</h2>
+            <span className="text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-2 py-1 whitespace-nowrap">
+              Rotación último período: {rotacionUltima === null ? 'N/D' : `${rotacionUltima.toFixed(1)}%`}
+            </span>
+          </div>
           <p className="text-sm text-muted mb-3">Activos, altas y bajas por período, desde los vínculos de empleo.</p>
+          <div className="flex justify-end mb-2">
+            <button onClick={descargar(`/reportes/headcount-evolucion.csv${qEmpresaExec}`, 'headcount-evolucion.csv')} className="btn btn-secondary text-xs">
+              Descargar CSV
+            </button>
+          </div>
           {headcount.length === 0 ? (
             <div className="h-[280px] flex items-center justify-center">
               <p className="text-sm text-slate-400">Sin períodos generados aún.</p>
@@ -166,6 +218,11 @@ export default function Reportes() {
         <Card>
           <h2 className="font-display font-bold mb-1">Costo de horas extras</h2>
           <p className="text-sm text-muted mb-3">Suplementarias (50%) vs. extraordinarias (100%) ya aplicadas a nómina, por período.</p>
+          <div className="flex justify-end mb-2">
+            <button onClick={descargar(`/reportes/horas-extras-evolucion.csv${qEmpresaExec}`, 'horas-extras-evolucion.csv')} className="btn btn-secondary text-xs">
+              Descargar CSV
+            </button>
+          </div>
           {horasExtrasEvol.length === 0 ? (
             <div className="h-[280px] flex items-center justify-center">
               <p className="text-sm text-slate-400">Sin horas extras aplicadas aún.</p>
@@ -188,22 +245,30 @@ export default function Reportes() {
         <Card>
           <h2 className="font-display font-bold mb-1">Desglose de rubros de un período</h2>
           <p className="text-sm text-muted mb-3">Composición del costo (IESS, décimos, fondos, horas extras, rubros...) de un período ya cerrado.</p>
-          <select value={periodoDesglose} onChange={(e) => setPeriodoDesglose(e.target.value)} className="input w-full mb-3">
-            <option value="">Elige un período cerrado</option>
-            {periodosCerrados.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
+          <div className="flex gap-2 flex-wrap mb-3">
+            <select value={periodoDesglose} onChange={(e) => setPeriodoDesglose(e.target.value)} className="input flex-1 min-w-48">
+              <option value="">Elige un período cerrado</option>
+              {periodosCerrados.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            <button onClick={descargar(`/reportes/desglose-rubros.csv${qDesglose}`, `desglose-rubros-${periodoDesglose}.csv`)}
+              disabled={!periodoDesglose} className="btn btn-primary disabled:opacity-40">
+              Descargar CSV
+            </button>
+          </div>
           {desglose.length === 0 ? (
             <div className="h-[240px] flex items-center justify-center">
               <p className="text-sm text-slate-400">{periodoDesglose ? 'Sin rubros en este período.' : 'Elige un período para ver el desglose.'}</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={desglose} layout="vertical" margin={{ left: 24 }}>
+              <BarChart data={desglosePorTipo} layout="vertical" margin={{ bottom: 8, left: 24 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} horizontal={false} />
                 <XAxis type="number" tick={chartAxisTick} axisLine={false} tickLine={false} tickFormatter={moneyCompacto} />
                 <YAxis type="category" dataKey="tipo_linea" tick={chartAxisTick} axisLine={false} tickLine={false} width={140} />
                 <Tooltip {...chartTooltipStyle} formatter={(v) => money(v)} />
-                <Bar dataKey="total" name="Total" fill="#d49a0f" radius={[0, 3, 3, 0]} />
+                <Legend wrapperStyle={chartLegendStyle} iconType="circle" iconSize={8} />
+                <Bar dataKey="ingreso" name="Ingreso" fill="#059669" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="descuento" name="Descuento" fill="#dc2626" radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
