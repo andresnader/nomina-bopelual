@@ -96,6 +96,35 @@ router.get('/evolucion-mensual.csv', async (req, res) => {
   res.send(csv);
 });
 
+async function headcountEvolucion(empresa) {
+  const { rows } = await pool.query(
+    `SELECT p.id, p.nombre, p.fecha_inicio,
+       (SELECT COUNT(DISTINCT ep.colaborador_id) FROM empleo_periodos ep
+        JOIN colaboradores c ON c.id=ep.colaborador_id
+        WHERE ep.fecha_entrada <= p.fecha_fin
+          AND (ep.fecha_salida IS NULL OR ep.fecha_salida >= p.fecha_inicio)
+          AND ($1::text IS NULL OR c.empresa=$1)) AS activos,
+       (SELECT COUNT(*) FROM empleo_periodos ep JOIN colaboradores c ON c.id=ep.colaborador_id
+        WHERE ep.fecha_entrada BETWEEN p.fecha_inicio AND p.fecha_fin
+          AND ($1::text IS NULL OR c.empresa=$1)) AS altas,
+       (SELECT COUNT(*) FROM empleo_periodos ep JOIN colaboradores c ON c.id=ep.colaborador_id
+        WHERE ep.fecha_salida BETWEEN p.fecha_inicio AND p.fecha_fin
+          AND ($1::text IS NULL OR c.empresa=$1)) AS bajas
+     FROM periodos p
+     WHERE p.tipo_periodo='QUINCENA'
+     ORDER BY p.fecha_inicio`,
+    [empresa || null]
+  );
+  return rows;
+}
+router.get('/headcount-evolucion', async (req, res) => res.json(await headcountEvolucion(req.query.empresa)));
+router.get('/headcount-evolucion.csv', async (req, res) => {
+  const csv = aCsv(await headcountEvolucion(req.query.empresa), ['nombre', 'fecha_inicio', 'activos', 'altas', 'bajas']);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="headcount-evolucion.csv"');
+  res.send(csv);
+});
+
 async function retencionesProveedor() {
   const { rows } = await pool.query(
     `SELECT c.nombre AS proveedor, date_trunc('month', f.fecha_factura)::date AS mes,

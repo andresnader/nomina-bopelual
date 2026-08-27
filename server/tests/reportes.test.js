@@ -256,4 +256,72 @@ describe('reportes', () => {
     const fila = res.body.find((r) => r.departamento === 'PRUEBAS');
     expect(Number(fila.neto)).toBeGreaterThan(0);
   });
+
+  it('headcount evolución cuenta activos, altas y bajas por período (desde empleo_periodos)', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `Headcount ${Date.now()}`, cedula: `HC${Date.now() % 1e8}`,
+      fecha_ingreso: '2021-07-10'
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2021-07-10'
+    });
+
+    // Período que cubre la fecha de ingreso -> cuenta como alta y como activo.
+    const perAlta = await auth(request(app).post('/api/periodos')).send({
+      nombre: `headcount alta ${Date.now()}`, fecha_inicio: '2021-07-01', fecha_fin: '2021-07-15', quincena: 1
+    });
+    // Período posterior sin ingreso/salida en su rango -> solo cuenta como activo.
+    const perPosterior = await auth(request(app).post('/api/periodos')).send({
+      nombre: `headcount posterior ${Date.now()}`, fecha_inicio: '2021-08-01', fecha_fin: '2021-08-15', quincena: 1
+    });
+
+    const res1 = await auth(request(app).get('/api/reportes/headcount-evolucion'));
+    const filaAlta = res1.body.find((r) => r.id === perAlta.body.periodo.id);
+    const filaPosterior = res1.body.find((r) => r.id === perPosterior.body.periodo.id);
+    expect(Number(filaAlta.altas)).toBeGreaterThanOrEqual(1);
+    expect(Number(filaAlta.activos)).toBeGreaterThanOrEqual(1);
+    expect(Number(filaPosterior.activos)).toBeGreaterThanOrEqual(Number(filaAlta.activos));
+
+    // Período que cubre una salida -> cuenta como baja.
+    const perSalida = await auth(request(app).post('/api/periodos')).send({
+      nombre: `headcount baja ${Date.now()}`, fecha_inicio: '2021-09-01', fecha_fin: '2021-09-15', quincena: 1
+    });
+    await auth(request(app).patch(`/api/colaboradores/${col.id}`)).send({ fecha_salida: '2021-09-05' });
+    const res2 = await auth(request(app).get('/api/reportes/headcount-evolucion'));
+    const filaSalida = res2.body.find((r) => r.id === perSalida.body.periodo.id);
+    expect(Number(filaSalida.bajas)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('headcount evolución filtra por empresa', async () => {
+    const app = createApp();
+    const fechaIngreso = '2021-10-10';
+    const bop = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `HeadBop ${Date.now()}`, cedula: `HB${Date.now() % 1e8}`, fecha_ingreso: fechaIngreso
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${bop.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: fechaIngreso
+    });
+    const carros = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `HeadCarros ${Date.now()}`, cedula: `HR${Date.now() % 1e8}`, fecha_ingreso: fechaIngreso
+    })).body;
+    await auth(request(app).patch(`/api/colaboradores/${carros.id}`)).send({ empresa: 'CARROS-YA S.A.' });
+    await auth(request(app).post(`/api/colaboradores/${carros.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: fechaIngreso
+    });
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `headcount empresa ${Date.now()}`, fecha_inicio: '2021-10-01', fecha_fin: '2021-10-15', quincena: 1
+    });
+
+    const soloCarros = await auth(
+      request(app).get(`/api/reportes/headcount-evolucion?empresa=${encodeURIComponent('CARROS-YA S.A.')}`)
+    );
+    const filaCarros = soloCarros.body.find((r) => r.id === per.body.periodo.id);
+    const consolidado = await auth(request(app).get('/api/reportes/headcount-evolucion'));
+    const filaConsolidado = consolidado.body.find((r) => r.id === per.body.periodo.id);
+
+    expect(Number(filaCarros.activos)).toBeGreaterThanOrEqual(1);
+    expect(Number(filaConsolidado.activos)).toBeGreaterThan(Number(filaCarros.activos));
+  });
 });
