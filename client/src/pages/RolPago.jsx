@@ -6,6 +6,7 @@ import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import PageTitle from '../components/PageTitle.jsx';
 import RoleGate from '../components/RoleGate.jsx';
+import { Modal } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money } from '../utils.js';
 
@@ -17,6 +18,7 @@ export default function RolPago() {
   const [nueva, setNueva] = useState(NUEVA);
   const [error, setError] = useState(null);
   const [tiposDescuento, setTiposDescuento] = useState([]);
+  const [lineaABorrar, setLineaABorrar] = useState(null);
   const toast = useToast();
 
   const cargar = () => api.get(`/roles/${id}`).then(setRol).catch((e) => setError(e.message));
@@ -35,14 +37,28 @@ export default function RolPago() {
     }
   };
 
-  const eliminar = async (lineaId) => {
+  const eliminar = async (lineaId, restaurarSaldo) => {
     try {
-      await api.del(`/roles/${id}/lineas/${lineaId}`);
+      await api.del(`/roles/${id}/lineas/${lineaId}`, restaurarSaldo != null ? { restaurar_saldo: restaurarSaldo } : undefined);
       toast.success('Línea eliminada.');
       cargar();
     } catch (err) {
       toast.error(err.message);
     }
+  };
+
+  // Una línea de préstamo/anticipo pregunta si hay que restaurar el saldo
+  // pendiente antes de borrar; el resto se borra directo (comportamiento
+  // previo, sin confirmación).
+  const pedirEliminar = (l) => {
+    if (l.prestamo_id) setLineaABorrar(l);
+    else eliminar(l.id);
+  };
+
+  const confirmarEliminar = (restaurarSaldo) => {
+    const l = lineaABorrar;
+    setLineaABorrar(null);
+    eliminar(l.id, restaurarSaldo);
   };
 
   const sincronizar = async () => {
@@ -99,13 +115,13 @@ export default function RolPago() {
         <Card>
           <h3 className="font-display font-bold mb-2 text-emerald-600">Ingresos</h3>
           {ingresos.map((l) => (
-            <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
+            <Linea key={l.id} l={l} editable={editable} onDel={pedirEliminar} />
           ))}
         </Card>
         <Card>
           <h3 className="font-display font-bold mb-2 text-red-600">Descuentos</h3>
           {descuentos.map((l) => (
-            <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
+            <Linea key={l.id} l={l} editable={editable} onDel={pedirEliminar} />
           ))}
         </Card>
       </div>
@@ -114,7 +130,7 @@ export default function RolPago() {
         <Card className="mt-4">
           <h3 className="font-display font-bold mb-2 text-slate-500">Provisiones (no afectan el neto)</h3>
           {provisiones.map((l) => (
-            <Linea key={l.id} l={l} editable={editable} onDel={eliminar} />
+            <Linea key={l.id} l={l} editable={editable} onDel={pedirEliminar} />
           ))}
         </Card>
       )}
@@ -149,6 +165,20 @@ export default function RolPago() {
           </Card>
         </RoleGate>
       )}
+
+      <Modal open={!!lineaABorrar} onClose={() => setLineaABorrar(null)} title="Eliminar línea de préstamo/anticipo" size="sm"
+        footer={
+          <>
+            <button onClick={() => setLineaABorrar(null)} className="btn btn-secondary">Cancelar</button>
+            <button onClick={() => confirmarEliminar(false)} className="btn btn-secondary">No restaurar</button>
+            <button onClick={() => confirmarEliminar(true)} className="btn btn-primary">Restaurar saldo</button>
+          </>
+        }>
+        <p className="text-sm text-slate-600">
+          ¿Restaurar el saldo pendiente de {lineaABorrar && money(lineaABorrar.monto)} en este préstamo/anticipo?
+          Restaurar lo reactiva y lo vuelve a incluir en la próxima sincronización; no restaurar lo deja como está.
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -163,7 +193,7 @@ function Linea({ l, editable, onDel }) {
       <span className="flex items-center gap-3">
         {money(l.monto)}
         {editable && (
-          <button onClick={() => onDel(l.id)} className="text-red-400 text-xs -m-2 p-2 md:m-0 md:p-0">✕</button>
+          <button onClick={() => onDel(l)} className="text-red-400 text-xs -m-2 p-2 md:m-0 md:p-0">✕</button>
         )}
       </span>
     </div>

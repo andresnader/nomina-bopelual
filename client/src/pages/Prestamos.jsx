@@ -9,6 +9,7 @@ import PageTitle from '../components/PageTitle.jsx';
 import { Modal, useConfirm } from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { money, fecha } from '../utils.js';
+import { QUINCENA_LABEL } from './Descuentos.jsx';
 
 const VACIO = { colaborador_id: '', monto_total: '', cuota_quincena: '', fecha_inicio: '', notas: '', tipo: 'PRESTAMO' };
 const FILTROS = [
@@ -118,10 +119,16 @@ export function AbonoModal({ prestamo, montoInicial, open, onClose, onGuardado }
 
 export function CuotaModal({ prestamo, open, onClose, onGuardado }) {
   const [cuota, setCuota] = useState('');
+  const [aplicarEn, setAplicarEn] = useState(0);
+  const [fechaInicio, setFechaInicio] = useState('');
   const toast = useToast();
 
   useEffect(() => {
-    if (open) setCuota(String(prestamo?.cuota_quincena ?? ''));
+    if (open) {
+      setCuota(String(prestamo?.cuota_quincena ?? ''));
+      setAplicarEn(prestamo?.aplicar_en ?? 0);
+      setFechaInicio(prestamo?.fecha_inicio?.slice(0, 10) ?? '');
+    }
   }, [open, prestamo]);
 
   if (!prestamo) return null;
@@ -129,8 +136,10 @@ export function CuotaModal({ prestamo, open, onClose, onGuardado }) {
   const guardar = async (e) => {
     e.preventDefault();
     try {
-      await api.patch(`/prestamos/${prestamo.id}`, { cuota_quincena: Number(cuota) });
-      toast.success('Cuota actualizada.');
+      await api.patch(`/prestamos/${prestamo.id}`, {
+        cuota_quincena: Number(cuota), aplicar_en: Number(aplicarEn), fecha_inicio: fechaInicio
+      });
+      toast.success('Préstamo/anticipo actualizado.');
       onGuardado();
       onClose();
     } catch (err) {
@@ -139,12 +148,23 @@ export function CuotaModal({ prestamo, open, onClose, onGuardado }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={`Editar cuota — ${prestamo.colaborador_nombre}`} size="sm"
+    <Modal open={open} onClose={onClose}
+      title={`Editar ${prestamo.tipo === 'ANTICIPO' ? 'anticipo' : 'préstamo'} — ${prestamo.colaborador_nombre}`}
+      size="sm"
       footer={<button type="submit" form="form-cuota" className="btn btn-primary">Guardar</button>}>
-      <form id="form-cuota" onSubmit={guardar}>
+      <form id="form-cuota" onSubmit={guardar} className="grid gap-3">
         <label className="text-sm text-slate-600">Cuota por quincena
           <input required autoFocus type="number" step="0.01" min="0.01" className="input w-full mt-1"
             value={cuota} onChange={(e) => setCuota(e.target.value)} />
+        </label>
+        <label className="text-sm text-slate-600">Quincena de descuento
+          <select className="input w-full mt-1" value={aplicarEn} onChange={(e) => setAplicarEn(e.target.value)}>
+            {Object.entries(QUINCENA_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label className="text-sm text-slate-600">A partir de
+          <input required type="date" className="input w-full mt-1"
+            value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
         </label>
       </form>
     </Modal>
@@ -300,7 +320,7 @@ export default function Prestamos() {
                   <td className="p-3 text-right whitespace-nowrap">
                     {money(p.cuota_quincena)}
                     {p.activo && (
-                      <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 align-middle" title="Editar cuota">
+                      <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 align-middle" title="Editar">
                         <Pencil size={13} />
                       </button>
                     )}
@@ -365,7 +385,7 @@ export default function Prestamos() {
                       <span>
                         Cuota {money(p.cuota_quincena)}
                         {p.activo && (
-                          <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 p-2" title="Editar cuota">
+                          <button onClick={() => setModalCuota(p)} className="text-slate-400 hover:text-gold-600 ml-1 p-2" title="Editar">
                             <Pencil size={13} />
                           </button>
                         )}

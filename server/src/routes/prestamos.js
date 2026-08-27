@@ -77,7 +77,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo, tipo_pago, numero_documento } = req.body;
+  const { colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo, tipo_pago, numero_documento, aplicar_en = 0 } = req.body;
   if (!colaborador_id || !monto_total || !cuota_quincena || !fecha_inicio) {
     return res.status(400).json({ error: 'campos requeridos' });
   }
@@ -93,9 +93,9 @@ router.post('/', async (req, res) => {
   }
   // saldo_pendiente arranca en monto_total (=$2).
   const { rows } = await pool.query(
-    `INSERT INTO prestamos (colaborador_id, monto_total, cuota_quincena, saldo_pendiente, fecha_inicio, notas, tipo, tipo_pago, numero_documento)
-     VALUES ($1,$2,$3,$2,$4,$5,$6,$7,$8) RETURNING *`,
-    [colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo || 'PRESTAMO', tp, numero_documento || null]
+    `INSERT INTO prestamos (colaborador_id, monto_total, cuota_quincena, saldo_pendiente, fecha_inicio, notas, tipo, tipo_pago, numero_documento, aplicar_en)
+     VALUES ($1,$2,$3,$2,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [colaborador_id, monto_total, cuota_quincena, fecha_inicio, notas, tipo || 'PRESTAMO', tp, numero_documento || null, aplicar_en]
   );
   res.status(201).json(rows[0]);
 });
@@ -104,7 +104,7 @@ router.patch('/:id', async (req, res) => {
   if ('cuota_quincena' in req.body && !(Number(req.body.cuota_quincena) > 0)) {
     return res.status(400).json({ error: 'la cuota debe ser mayor a 0' });
   }
-  const campos = ['cuota_quincena', 'activo', 'notas', 'tipo_pago', 'numero_documento'];
+  const campos = ['cuota_quincena', 'activo', 'notas', 'tipo_pago', 'numero_documento', 'aplicar_en', 'fecha_inicio'];
   const set = [];
   const params = [];
   for (const c of campos) {

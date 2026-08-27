@@ -84,16 +84,22 @@ router.delete('/:rolId/lineas/:lineaId', requireRole(['ADMIN', 'RRHH']), async (
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      'SELECT descuento_recurrente_id, prestamo_id FROM lineas_rol WHERE id=$1 AND rol_pago_id=$2',
+      'SELECT descuento_recurrente_id, prestamo_id, monto FROM lineas_rol WHERE id=$1 AND rol_pago_id=$2',
       [req.params.lineaId, req.params.rolId]
     );
     if (rows.length > 0) {
-      const { descuento_recurrente_id, prestamo_id } = rows[0];
+      const { descuento_recurrente_id, prestamo_id, monto } = rows[0];
       if (descuento_recurrente_id) {
         await client.query('UPDATE descuentos_recurrentes SET activo=false WHERE id=$1', [descuento_recurrente_id]);
       }
-      if (prestamo_id) {
-        await client.query('UPDATE prestamos SET activo=false WHERE id=$1 AND saldo_pendiente <= 0', [prestamo_id]);
+      // Restaurar el saldo es opcional (lo confirma quien borra la línea):
+      // esta cuota ya fue descontada, así que devolverla al préstamo/anticipo
+      // solo tiene sentido si de verdad se quiere "deshacer" ese descuento.
+      if (prestamo_id && req.body?.restaurar_saldo) {
+        await client.query(
+          'UPDATE prestamos SET saldo_pendiente=saldo_pendiente+$1, activo=true WHERE id=$2',
+          [monto, prestamo_id]
+        );
       }
     }
     await client.query('DELETE FROM lineas_rol WHERE id=$1 AND rol_pago_id=$2', [
@@ -129,14 +135,14 @@ router.post('/:id/sincronizar', requireRole(['ADMIN', 'RRHH']), async (req, res)
       return res.status(404).json({ error: 'rol no encontrado' });
     }
     const sueldo = await aplicarSueldoPendiente(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_inicio, rows[0].fecha_fin);
-    const agregadosPrestamos = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].fecha_fin);
+    const { agregadas: agregadosPrestamos, actualizadas: actualizadosPrestamos } = await aplicarPrestamosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_fin);
     const { agregadas: agregadosDescuentos, actualizadas: actualizadosDescuentos } = await aplicarDescuentosPendientes(client, req.params.id, rows[0].colaborador_id, rows[0].quincena, rows[0].fecha_inicio);
     const totales = await recalcularTotales(client, req.params.id);
     await client.query('COMMIT');
     res.json({
       ...totales,
       agregadas: sueldo.agregadas + agregadosPrestamos + agregadosDescuentos,
-      actualizadas: sueldo.actualizadas + actualizadosDescuentos
+      actualizadas: sueldo.actualizadas + actualizadosPrestamos + actualizadosDescuentos
     });
   } catch (e) {
     await client.query('ROLLBACK');

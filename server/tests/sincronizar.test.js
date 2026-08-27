@@ -97,6 +97,91 @@ describe('POST /api/roles/:id/sincronizar', () => {
     expect(despues.filter((l) => l.tipo_linea === 'ALIMENTACION')).toHaveLength(1);
   });
 
+  it('respeta aplicar_en del préstamo: no aplica en una quincena excluida', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncAplicaEn ${Date.now()}`, cedula: `SA${Date.now() % 1e8}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    // Préstamo restringido a la 1ra quincena.
+    await auth(request(app).post('/api/prestamos')).send({
+      colaborador_id: col.id, monto_total: 200, cuota_quincena: 50, fecha_inicio: '2026-09-01', aplicar_en: 1
+    });
+
+    const per2 = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync aplica_en 2da ${Date.now()}`, fecha_inicio: '2026-09-16', fecha_fin: '2026-09-30', quincena: 2
+    });
+    const det2 = await auth(request(app).get(`/api/periodos/${per2.body.periodo.id}`));
+    const rol2 = det2.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    const sync2 = await auth(request(app).post(`/api/roles/${rol2.id}/sincronizar`));
+    expect(sync2.body.agregadas).toBe(0);
+    const lineas2 = (await auth(request(app).get(`/api/roles/${rol2.id}`))).body.lineas;
+    expect(lineas2.some((l) => l.tipo_linea === 'CUOTA_PRESTAMO')).toBe(false);
+
+    const per1 = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync aplica_en 1ra ${Date.now()}`, fecha_inicio: '2026-09-01', fecha_fin: '2026-09-15', quincena: 1
+    });
+    const det1 = await auth(request(app).get(`/api/periodos/${per1.body.periodo.id}`));
+    const rol1 = det1.body.roles_pago.find((r) => r.colaborador_id === col.id);
+    // El préstamo ya existía al crear este período: generarRoles ya se lo
+    // aplicó automáticamente (no hace falta sincronizar a mano).
+    const lineas1 = (await auth(request(app).get(`/api/roles/${rol1.id}`))).body.lineas;
+    expect(lineas1.some((l) => l.tipo_linea === 'CUOTA_PRESTAMO')).toBe(true);
+  });
+
+  it('actualiza el monto de una cuota de préstamo ya generada y ajusta el saldo correctamente', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `SyncCuotaEdit ${Date.now()}`, cedula: `SQ${Date.now() % 1e8}`
+      })
+    ).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2026-01-01'
+    });
+    const pr = (
+      await auth(request(app).post('/api/prestamos')).send({
+        colaborador_id: col.id, monto_total: 500, cuota_quincena: 100, fecha_inicio: '2026-10-01'
+      })
+    ).body;
+
+    const per = await auth(request(app).post('/api/periodos')).send({
+      nombre: `sync cuota edit ${Date.now()}`, fecha_inicio: '2026-10-16', fecha_fin: '2026-10-31', quincena: 2
+    });
+    const det1 = await auth(request(app).get(`/api/periodos/${per.body.periodo.id}`));
+    const rol = det1.body.roles_pago.find((r) => r.colaborador_id === col.id);
+
+    // El préstamo ya existía al crear el período, así que generarRoles ya le
+    // aplicó la cuota automáticamente (sin necesidad de sincronizar a mano).
+    const antes = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    expect(antes.find((l) => l.tipo_linea === 'CUOTA_PRESTAMO').monto).toBe('100.00');
+    const prAntes = (await auth(request(app).get(`/api/prestamos/${pr.id}`))).body;
+    expect(Number(prAntes.saldo_pendiente)).toBe(400); // 500 - 100
+
+    // Se corrige la cuota DESPUÉS de generada la línea (ej. caso Jhonas 149→150).
+    await auth(request(app).patch(`/api/prestamos/${pr.id}`)).send({ cuota_quincena: 150 });
+
+    const sync = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
+    expect(sync.status).toBe(200);
+    expect(sync.body.actualizadas).toBe(1);
+
+    const despues = (await auth(request(app).get(`/api/roles/${rol.id}`))).body.lineas;
+    const lineasCuota = despues.filter((l) => l.tipo_linea === 'CUOTA_PRESTAMO');
+    expect(lineasCuota).toHaveLength(1);
+    expect(lineasCuota[0].monto).toBe('150.00');
+    const prDespues = (await auth(request(app).get(`/api/prestamos/${pr.id}`))).body;
+    // El saldo se recalcula desde el monto original (500), no se descuenta dos veces.
+    expect(Number(prDespues.saldo_pendiente)).toBe(350); // 500 - 150
+
+    // Sincronizar de nuevo no lo vuelve a actualizar (ya está al día).
+    const sync2 = await auth(request(app).post(`/api/roles/${rol.id}/sincronizar`));
+    expect(sync2.body.actualizadas).toBe(0);
+  });
+
   it('rechaza sincronizar un período que no está en BORRADOR', async () => {
     const app = createApp();
     const col = (

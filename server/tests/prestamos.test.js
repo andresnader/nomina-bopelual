@@ -196,4 +196,41 @@ describe('préstamos', () => {
     });
     expect(mala.status).toBe(400);
   });
+
+  it('permite fijar aplicar_en al crear', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `CrearAplicaEn ${Date.now()}`, cedula: `CA${Date.now() % 1e8}`
+      })
+    ).body;
+    const pr = (
+      await auth(request(app).post('/api/prestamos')).send({
+        colaborador_id: col.id, monto_total: 300, cuota_quincena: 100, fecha_inicio: '2026-07-01', aplicar_en: 1
+      })
+    ).body;
+    expect(pr.aplicar_en).toBe(1);
+  });
+
+  it('permite editar aplicar_en y fecha_inicio', async () => {
+    const app = createApp();
+    const col = (
+      await auth(request(app).post('/api/colaboradores')).send({
+        tipo: 'IESS', nombre: `EditarPeriodo ${Date.now()}`, cedula: `EP${Date.now() % 1e8}`
+      })
+    ).body;
+    const pr = (
+      await auth(request(app).post('/api/prestamos')).send({
+        colaborador_id: col.id, monto_total: 300, cuota_quincena: 100, fecha_inicio: '2026-07-01'
+      })
+    ).body;
+    expect(pr.aplicar_en).toBe(0);
+
+    const editado = await auth(request(app).patch(`/api/prestamos/${pr.id}`)).send({
+      aplicar_en: 1, fecha_inicio: '2026-08-01'
+    });
+    expect(editado.status).toBe(200);
+    expect(editado.body.aplicar_en).toBe(1);
+    expect(editado.body.fecha_inicio.slice(0, 10)).toBe('2026-08-01');
+  });
 });

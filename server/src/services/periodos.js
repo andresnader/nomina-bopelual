@@ -187,35 +187,60 @@ export async function aplicarSueldoPendiente(client, rolId, colaboradorId, quinc
 
 // Aplica al rol las cuotas de préstamos activos que aún no tenga (por
 // prestamo_id), respetando que ya deba haber empezado a descontarse.
-// Reutilizable desde generarRoles y desde /roles/:id/sincronizar.
-export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, periodoFechaFin) {
+// Reutilizable desde generarRoles y desde /roles/:id/sincronizar. Igual que
+// aplicarDescuentosPendientes: inserta las cuotas que aún no tenga línea y
+// refresca el monto de las que ya tenía si la cuota fue editada después de
+// generado el rol. Como el saldo del préstamo es acumulativo (a diferencia
+// del monto plano de un descuento), actualizar una línea existente primero
+// "deshace" su monto del saldo_pendiente antes de recalcular con la cuota
+// nueva — si no, quedaría descontado dos veces.
+export async function aplicarPrestamosPendientes(client, rolId, colaboradorId, quincena, periodoFechaFin) {
+  const q = Number(quincena);
   const { rows: prestamos } = await client.query(
-      `SELECT p.* FROM prestamos p
+    `SELECT p.* FROM prestamos p
      WHERE p.colaborador_id=$1 AND p.activo=true AND p.fecha_inicio <= $2::date
-       AND NOT EXISTS (
-         SELECT 1 FROM lineas_rol l WHERE l.rol_pago_id=$3 AND l.prestamo_id=p.id
-       )`,
-    [colaboradorId, periodoFechaFin, rolId]
+       AND p.aplicar_en IN (0,$3)`,
+    [colaboradorId, periodoFechaFin, q]
   );
   let agregadas = 0;
+  let actualizadas = 0;
   for (const pr of prestamos) {
-    const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
-    if (r.aplicada > 0) {
-      const esAnticipo = pr.tipo === 'ANTICIPO';
-      const tipoLinea = esAnticipo ? 'ANTICIPO_SUELDO' : 'CUOTA_PRESTAMO';
-      const descripcion = esAnticipo ? 'Cuota de anticipo' : 'Cuota de préstamo';
-      await client.query(
-        `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, prestamo_id)
-         VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
-        [rolId, tipoLinea, r.aplicada, descripcion, pr.id]
-      );
-      await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
-        r.saldoNuevo, r.activo, pr.id
-      ]);
-      agregadas++;
+    const esAnticipo = pr.tipo === 'ANTICIPO';
+    const tipoLinea = esAnticipo ? 'ANTICIPO_SUELDO' : 'CUOTA_PRESTAMO';
+    const descripcion = esAnticipo ? 'Cuota de anticipo' : 'Cuota de préstamo';
+
+    const { rows: existentes } = await client.query(
+      'SELECT id, monto FROM lineas_rol WHERE rol_pago_id=$1 AND prestamo_id=$2',
+      [rolId, pr.id]
+    );
+
+    if (existentes.length === 0) {
+      const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), Number(pr.saldo_pendiente));
+      if (r.aplicada > 0) {
+        await client.query(
+          `INSERT INTO lineas_rol (rol_pago_id, tipo_linea, clase, monto, descripcion, es_provision, prestamo_id)
+           VALUES ($1,$2,'DESCUENTO',$3,$4,false,$5)`,
+          [rolId, tipoLinea, r.aplicada, descripcion, pr.id]
+        );
+        await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
+          r.saldoNuevo, r.activo, pr.id
+        ]);
+        agregadas++;
+      }
+    } else {
+      const linea = existentes[0];
+      const saldoRestaurado = round2(Number(pr.saldo_pendiente) + Number(linea.monto));
+      const r = calc.cuotaPrestamo(Number(pr.cuota_quincena), saldoRestaurado);
+      if (r.aplicada !== Number(linea.monto)) {
+        await client.query('UPDATE lineas_rol SET monto=$1 WHERE id=$2', [r.aplicada, linea.id]);
+        await client.query('UPDATE prestamos SET saldo_pendiente=$1, activo=$2 WHERE id=$3', [
+          r.saldoNuevo, r.activo, pr.id
+        ]);
+        actualizadas++;
+      }
     }
   }
-  return agregadas;
+  return { agregadas, actualizadas };
 }
 
 // Aplica al rol los descuentos recurrentes activos que correspondan a esta
@@ -325,7 +350,7 @@ async function generarRolColaborador(client, periodoId, periodo, col, pctAnticip
   const rolId = rolRows[0].id;
 
   await aplicarLineasSueldo(client, rolId, col, periodo, pctAnticipoGlobal, pctAnticipoExterno, sbu, new Map());
-  await aplicarPrestamosPendientes(client, rolId, col.id, periodo.fecha_fin);
+  await aplicarPrestamosPendientes(client, rolId, col.id, periodo.quincena, periodo.fecha_fin);
   await aplicarDescuentosPendientes(client, rolId, col.id, periodo.quincena, periodo.fecha_inicio);
 
   await recalcularTotales(client, rolId);
@@ -536,7 +561,9 @@ export async function sincronizarPeriodo(client, periodoId) {
     const sueldo = await aplicarSueldoPendiente(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_inicio, periodoRows[0].fecha_fin);
     agregadas += sueldo.agregadas;
     actualizadas += sueldo.actualizadas;
-    agregadas += await aplicarPrestamosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].fecha_fin);
+    const prestamos = await aplicarPrestamosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_fin);
+    agregadas += prestamos.agregadas;
+    actualizadas += prestamos.actualizadas;
     const descuentos = await aplicarDescuentosPendientes(client, rol.id, rol.colaborador_id, periodoRows[0].quincena, periodoRows[0].fecha_inicio);
     agregadas += descuentos.agregadas;
     actualizadas += descuentos.actualizadas;
