@@ -202,7 +202,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
     'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal',
-    'iess_tasa_personal_especial'
+    'iess_tasa_personal_especial', 'provincia', 'ciudad'
   ];
   if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
   // `tipo` decide el porcentaje de la quincena, si se prorratea y si le tocan

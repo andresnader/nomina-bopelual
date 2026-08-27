@@ -51,6 +51,7 @@ function FichaTab({ col, onGuardado, onError }) {
     pct_anticipo: col.pct_anticipo != null ? String(Number(col.pct_anticipo)) : '',
     fecha_nacimiento: col.fecha_nacimiento?.slice(0, 10) ?? '', sexo: col.sexo ?? '',
     estado_civil: col.estado_civil ?? '', direccion: col.direccion ?? '',
+    provincia: col.provincia ?? '', ciudad: col.ciudad ?? '',
     horario: col.horario ?? '',
     acumular_decimos: col.acumular_decimos ?? true,
     acumular_fondos_reserva: col.acumular_fondos_reserva ?? false,
@@ -70,6 +71,8 @@ function FichaTab({ col, onGuardado, onError }) {
         sexo: form.sexo || null,
         estado_civil: form.estado_civil || null,
         direccion: form.direccion || null,
+        provincia: form.provincia || null,
+        ciudad: form.ciudad || null,
         horario: form.horario || null,
       });
       toast.success('Datos guardados.');
@@ -131,6 +134,8 @@ function FichaTab({ col, onGuardado, onError }) {
             </select>
           </label>
           <label className="text-sm text-slate-600">Dirección de domicilio {campo('direccion')}</label>
+          <label className="text-sm text-slate-600">Provincia {campo('provincia')}</label>
+          <label className="text-sm text-slate-600">Ciudad {campo('ciudad')}</label>
           <div className="text-sm text-slate-600">
             <span className="block mb-1">Fechas Ingreso/Salida Empresa</span>
             <div className="flex items-center gap-2">
