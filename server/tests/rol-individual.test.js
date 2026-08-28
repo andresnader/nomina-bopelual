@@ -85,13 +85,62 @@ describe('armarRolIndividual', () => {
 
     const anticipo = resultado.egresos.find((e) => e.label === 'Anticipo 1ra. Quincena');
     expect(anticipo).toBeTruthy();
+    // El anticipo que se resta acá debe ser el NETO de Q1 (920 de anticipo
+    // bruto - 704.18 de la cuota HIPOTECARIO que ya se descontó en Q1 misma),
+    // no el bruto: 215.82. Si se restara el bruto (920), la cuota HIPOTECARIO
+    // quedaría contada dos veces (una como su propia fila de egreso arriba,
+    // otra de nuevo escondida en el anticipo).
+    expect(Number(anticipo.monto)).toBeCloseTo(215.82, 2);
     // El anticipo debe ser la ÚLTIMA fila de egresos.
     expect(resultado.egresos[resultado.egresos.length - 1].label).toBe('Anticipo 1ra. Quincena');
 
+    expect(Number(resultado.totalEgresos)).toBeCloseTo(1324.8, 2); // 704.18 + 404.8 + 215.82
+    expect(Number(resultado.totalARecibir)).toBeCloseTo(1396.79, 2); // 2721.59 - 1324.8
     expect(Number(resultado.totalARecibir)).toBeCloseTo(
       Number(resultado.totalIngresos) - Number(resultado.totalEgresos), 2
     );
     expect(resultado.diasTrabajados).toBe(30);
+  });
+
+  it('totalARecibir debe igualar el neto real de Q2 cuando Q1 tiene una cuota de préstamo propia (regresión: no restar el anticipo bruto de Q1 dos veces)', async () => {
+    const app = createApp();
+    const { col, periodoQ1Id, periodoQ2Id } = await crearMesCompleto(app, {
+      nombreCol: `RolIndividualRegresion ${Date.now()}`, sueldoBase: 2300, iessTasaEspecial: 0.176,
+      mesInicio: '2027-11-01', mesFin: '2027-11-30',
+      q1Inicio: '2027-11-01', q1Fin: '2027-11-15',
+      q2Inicio: '2027-11-16', q2Fin: '2027-11-30',
+      notasPrestamo: 'HIPOTECARIO'
+    });
+
+    const resultado = await armarRolIndividual(pool, { colaboradorId: col.id, periodoQ2Id });
+
+    // El HIPOTECARIO (704.18) se aplicó solo en Q1 (aplicar_en=1), así que
+    // Q1 ya tiene un egreso propio: su neto real pagado por transferencia
+    // fue MENOR que el anticipo bruto. Antes del fix, restar el anticipo
+    // bruto (en vez del neto de Q1) hacía que esa cuota se contara dos
+    // veces y totalARecibir quedara subvaluado en exactamente 704.18.
+    const { rows: rolesQ1 } = await pool.query(
+      `SELECT neto FROM roles_pago WHERE colaborador_id=$1 AND periodo_id=$2`,
+      [col.id, periodoQ1Id]
+    );
+    const { rows: rolesQ2 } = await pool.query(
+      `SELECT neto FROM roles_pago WHERE colaborador_id=$1 AND periodo_id=$2`,
+      [col.id, periodoQ2Id]
+    );
+    const netoRealQ1 = Number(rolesQ1[0].neto);
+    const netoRealQ2 = Number(rolesQ2[0].neto);
+
+    // El neto de Q1 debe ser el anticipo bruto (920) menos la cuota HIPOTECARIO
+    // aplicada ahí mismo (704.18) — confirma que el fixture sí ejercita el
+    // escenario del bug (una deducción propia de Q1).
+    expect(netoRealQ1).toBeCloseTo(920 - 704.18, 2);
+
+    const anticipo = resultado.egresos.find((e) => e.label === 'Anticipo 1ra. Quincena');
+    expect(Number(anticipo.monto)).toBeCloseTo(netoRealQ1, 2);
+
+    // La aserción central: lo que el documento dice que falta por entregar
+    // ahora debe coincidir con lo que Q2 realmente le debe al colaborador.
+    expect(Number(resultado.totalARecibir)).toBeCloseTo(netoRealQ2, 2);
   });
 
   it('usa 9.45% IESS por defecto cuando el colaborador no tiene tasa especial', async () => {

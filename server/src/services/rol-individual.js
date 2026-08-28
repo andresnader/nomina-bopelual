@@ -122,11 +122,20 @@ export async function armarRolIndividual(client, { colaboradorId, periodoQ2Id })
     }
     egresos.push({ label, monto: Number(l.monto) });
   }
-  // El anticipo de Q1 es INGRESO ahí, pero acá se re-lista como egreso: ya
-  // se pagó en efectivo, hay que restarlo del total a entregar ahora.
+  // Q1 ya se pagó por transferencia aparte (su "neto"): hay que restar eso
+  // del total a entregar ahora, NO el anticipo bruto — sus propios
+  // descuentos (IESS, cuotas de préstamo aplicadas en Q1, etc.) ya están
+  // listados arriba como egresos individuales, así que restar el bruto
+  // los contaría dos veces.
   const anticipoQ1 = lineasQ1.find((l) => l.clase === 'INGRESO' && l.tipo_linea === 'ANTICIPO_QUINCENA');
   if (anticipoQ1) {
-    egresos.push({ label: 'Anticipo 1ra. Quincena', monto: Number(anticipoQ1.monto) });
+    const ingresosQ1 = round2(lineasQ1
+      .filter((l) => l.clase === 'INGRESO')
+      .reduce((s, l) => s + Number(l.monto), 0));
+    const descuentosQ1 = round2(lineasQ1
+      .filter((l) => l.clase === 'DESCUENTO')
+      .reduce((s, l) => s + Number(l.monto), 0));
+    egresos.push({ label: 'Anticipo 1ra. Quincena', monto: round2(ingresosQ1 - descuentosQ1) });
   }
   const totalEgresos = round2(egresos.reduce((s, e) => s + e.monto, 0));
 
