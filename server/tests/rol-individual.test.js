@@ -171,4 +171,34 @@ describe('armarRolIndividual', () => {
     await expect(armarRolIndividual(pool, { colaboradorId: col.id, periodoQ2Id: q1.body.periodo.id }))
       .rejects.toThrow('el período indicado no es una 2da quincena');
   });
+
+  it('cuenta los días trabajados sobre el mes completo, no solo una quincena (ingreso a mitad de mes)', async () => {
+    const app = createApp();
+    const col = (await auth(request(app).post('/api/colaboradores')).send({
+      tipo: 'IESS', nombre: `RolIndividualMedioMes ${Date.now()}`, cedula: `MM${Date.now() % 1e8}`,
+      fecha_ingreso: '2028-06-10'
+    })).body;
+    await auth(request(app).post(`/api/colaboradores/${col.id}/contratos`)).send({
+      sueldo_base: 1000, fecha_inicio: '2028-06-10'
+    });
+
+    const mes = await pool.query(
+      `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, tipo_periodo, estado)
+       VALUES ($1,$2,$3,'AMBAS','MES','BORRADOR') RETURNING id`,
+      [`Mes RI MedioMes ${Date.now()}`, '2028-06-01', '2028-06-30']
+    );
+    const q1 = await auth(request(app).post('/api/periodos')).send({
+      nombre: `1ra MedioMes ${Date.now()}`, fecha_inicio: '2028-06-01', fecha_fin: '2028-06-15', quincena: 1
+    });
+    const q2 = await auth(request(app).post('/api/periodos')).send({
+      nombre: `2da MedioMes ${Date.now()}`, fecha_inicio: '2028-06-16', fecha_fin: '2028-06-30', quincena: 2
+    });
+    await pool.query(`UPDATE periodos SET mes_periodo_id=$1 WHERE id IN ($2,$3)`, [mes.rows[0].id, q1.body.periodo.id, q2.body.periodo.id]);
+
+    const resultado = await armarRolIndividual(pool, { colaboradorId: col.id, periodoQ2Id: q2.body.periodo.id });
+    // 2028-06-10 a 2028-06-30 inclusive = 21 días (30 - 10 + 1). Antes del
+    // fix, factorProrrateo tapaba el conteo en 15 (una sola quincena) y
+    // devolvía 30 (100% del mes) para este caso.
+    expect(resultado.diasTrabajados).toBe(21);
+  });
 });

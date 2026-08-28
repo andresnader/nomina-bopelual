@@ -1,8 +1,20 @@
-import * as calc from '../lib/calculo.js';
 import { round2 } from '../lib/round.js';
 import { TASAS } from '../lib/tasas.js';
+import { diasEntre } from '../lib/vacaciones.js';
 
 const LINEAS_NO_EGRESO = ['SUELDO_BASE', 'ANTICIPO_QUINCENA', 'BONO'];
+
+// factorProrrateo (calculo.js) tapa el conteo en 15 días — pensado para UNA
+// quincena. Acá necesitamos el rango del mes completo (hasta 30 días), así
+// que se calcula directo en vez de reusar esa función fuera de su dominio.
+function diasTrabajadosEnMes(fechaIngreso, fechaSalida, mesFechaInicio, mesFechaFin) {
+  const inicioEfectivo = fechaIngreso && new Date(fechaIngreso) > new Date(mesFechaInicio)
+    ? fechaIngreso : mesFechaInicio;
+  const finEfectivo = fechaSalida && new Date(fechaSalida) < new Date(mesFechaFin)
+    ? fechaSalida : mesFechaFin;
+  if (new Date(inicioEfectivo) > new Date(finEfectivo)) return 0;
+  return Math.min(diasEntre(inicioEfectivo, finEfectivo), 30);
+}
 
 // Encuentra la quincena 1 hermana de una quincena 2: primero por el período
 // MES padre (mes_periodo_id); si el mes no tiene padre (datos anteriores a
@@ -77,8 +89,7 @@ export async function armarRolIndividual(client, { colaboradorId, periodoQ2Id })
   const todasLasLineas = [...lineasQ1, ...lineasQ2];
 
   const mesFechaInicio = periodoQ1?.fecha_inicio ?? periodoQ2.fecha_inicio;
-  const factor = calc.factorProrrateo(colaborador.fecha_ingreso, colaborador.fecha_salida, mesFechaInicio, periodoQ2.fecha_fin);
-  const diasTrabajados = Math.round(factor * 30);
+  const diasTrabajados = diasTrabajadosEnMes(colaborador.fecha_ingreso, colaborador.fecha_salida, mesFechaInicio, periodoQ2.fecha_fin);
 
   // Ingresos
   const sumaTipo = (tipo) => round2(todasLasLineas
