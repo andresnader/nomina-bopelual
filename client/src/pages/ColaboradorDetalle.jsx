@@ -6,7 +6,7 @@ import Card from '../components/Card.jsx';
 import Badge from '../components/Badge.jsx';
 import MobileCard from '../components/MobileCard.jsx';
 import PageTitle from '../components/PageTitle.jsx';
-import { money, fecha, fraccionAPorcentaje, porcentajeAFraccion } from '../utils.js';
+import { money, fecha, fraccionAPorcentaje, porcentajeAFraccion, descargarBlob, base64ABlob } from '../utils.js';
 import { FormDescuento, TablaDescuentos } from './Descuentos.jsx';
 import { AbonoModal, CuotaModal } from './Prestamos.jsx';
 import { FormAusencia, TablaAusencias } from './Ausencias.jsx';
@@ -1929,12 +1929,23 @@ function FacturasTab({ col }) {
 }
 
 function RolesTab({ col }) {
+  const toast = useToast();
+
+  const descargarRolIndividual = async (periodoId) => {
+    try {
+      const r = await api.get(`/colaboradores/${col.id}/rol-individual-excel?periodo_id=${periodoId}`);
+      descargarBlob(r.archivo, base64ABlob(r.contenidoBase64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   return (
     <Card className="p-0 overflow-x-auto">
       <table className="hidden md:table w-full text-sm">
         <thead className="text-slate-500 text-left">
           <tr className="border-b border-slate-200">
-            <th className="p-3">Período</th><th className="p-3 text-right">Neto</th><th className="p-3">Estado</th>
+            <th className="p-3">Período</th><th className="p-3 text-right">Neto</th><th className="p-3">Estado</th><th className="p-3"></th>
           </tr>
         </thead>
         <tbody>
@@ -1947,9 +1958,16 @@ function RolesTab({ col }) {
               </td>
               <td className="p-3 text-right font-semibold">{money(r.neto)}</td>
               <td className="p-3"><Badge estado={r.estado_pago} /></td>
+              <td className="p-3 text-right">
+                {col.tipo === 'IESS' && r.periodo_quincena === '2' && (
+                  <button onClick={() => descargarRolIndividual(r.periodo_id)} className="btn btn-secondary text-xs">
+                    Rol individual (Excel)
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
-          {col.roles_pago.length === 0 && <tr><td colSpan={3} className="p-4 text-slate-500">Sin roles aún.</td></tr>}
+          {col.roles_pago.length === 0 && <tr><td colSpan={4} className="p-4 text-slate-500">Sin roles aún.</td></tr>}
         </tbody>
       </table>
 

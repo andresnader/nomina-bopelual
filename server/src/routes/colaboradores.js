@@ -136,7 +136,7 @@ router.get(
     const [contratos, rolesPago, prestamos, emisiones] = await Promise.all([
       pool.query('SELECT * FROM contratos WHERE colaborador_id=$1 ORDER BY fecha_inicio DESC', [req.params.id]),
       pool.query(
-        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha, p.estado AS periodo_estado
+        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha, p.estado AS periodo_estado, p.quincena AS periodo_quincena
          FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
          WHERE rp.colaborador_id=$1 ORDER BY p.fecha_inicio DESC`,
         [req.params.id]
