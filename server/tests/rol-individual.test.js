@@ -63,7 +63,17 @@ describe('armarRolIndividual', () => {
 
     const sueldo = resultado.ingresos.find((i) => i.label === 'SUELDO');
     expect(Number(sueldo.monto)).toBeCloseTo(2300, 2);
-    expect(Number(resultado.totalIngresos)).toBeCloseTo(2300, 2);
+    // totalIngresos incluye SUELDO + décimo tercero/cuarto + fondos de
+    // reserva: son líneas reales de la 2da quincena (es_provision=false),
+    // no provisiones contables, así que sí forman parte de lo que este
+    // documento reporta como ingreso del período.
+    expect(Number(resultado.totalIngresos)).toBeCloseTo(2721.59, 2); // 2300 sueldo + 191.67 décimo3 + 38.33 décimo4 + 191.59 fondos
+    const decimo3 = resultado.ingresos.find((i) => i.label === 'DECIMO_TERCERO');
+    const decimo4 = resultado.ingresos.find((i) => i.label === 'DECIMO_CUARTO');
+    const fondos = resultado.ingresos.find((i) => i.label === 'Fondos de reserva');
+    expect(decimo3).toBeTruthy();
+    expect(decimo4).toBeTruthy();
+    expect(fondos).toBeTruthy();
 
     const iess = resultado.egresos.find((e) => e.label === '17.60% IESS');
     expect(iess).toBeTruthy();

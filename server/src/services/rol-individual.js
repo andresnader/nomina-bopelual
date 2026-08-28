@@ -2,16 +2,7 @@ import * as calc from '../lib/calculo.js';
 import { round2 } from '../lib/round.js';
 import { TASAS } from '../lib/tasas.js';
 
-// SUELDO_BASE/ANTICIPO_QUINCENA se recombinan en la fila "SUELDO"; BONO ya se
-// agrega aparte arriba. DECIMO_TERCERO/DECIMO_CUARTO/FONDOS_RESERVA se generan
-// en la 2da quincena como líneas de ingreso reales (es_provision=false, sí
-// forman parte del neto que se transfiere), pero el documento histórico de
-// Rol de Pagos Individual que este archivo reconstruye nunca las itemiza —
-// son beneficios de ley reportados aparte, no parte del rol mensual en papel.
-const LINEAS_NO_EGRESO = [
-  'SUELDO_BASE', 'ANTICIPO_QUINCENA', 'BONO',
-  'DECIMO_TERCERO', 'DECIMO_CUARTO', 'FONDOS_RESERVA',
-];
+const LINEAS_NO_EGRESO = ['SUELDO_BASE', 'ANTICIPO_QUINCENA', 'BONO'];
 
 // Encuentra la quincena 1 hermana de una quincena 2: primero por el período
 // MES padre (mes_periodo_id); si el mes no tiene padre (datos anteriores a
