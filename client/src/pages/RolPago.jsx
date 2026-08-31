@@ -126,6 +126,8 @@ export default function RolPago() {
         </Card>
       </div>
 
+      {rol.quincenaAnterior && <QuincenaAnterior q={rol.quincenaAnterior} />}
+
       {provisiones.length > 0 && (
         <Card className="mt-4">
           <h3 className="font-display font-bold mb-2 text-slate-500">Provisiones (no afectan el neto)</h3>
@@ -180,6 +182,34 @@ export default function RolPago() {
         </p>
       </Modal>
     </div>
+  );
+}
+
+// Referencia de solo lectura de la 1ra quincena mientras se revisa/edita la
+// 2da — para que no haya que salir de la pantalla a buscarla manualmente.
+function QuincenaAnterior({ q }) {
+  const ingresos = q.lineas.filter((l) => l.clase === 'INGRESO' && !l.es_provision);
+  const descuentos = q.lineas.filter((l) => l.clase === 'DESCUENTO');
+
+  return (
+    <Card className="mt-4 border-dashed">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-display font-bold text-slate-500">
+          Quincena anterior — {q.periodo_nombre} <Badge estado={q.periodo_estado} />
+        </h3>
+        <span className="text-sm text-slate-500">Neto pagado: <strong>{money(q.neto)}</strong></span>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-sm font-semibold text-emerald-600 mb-1">Ingresos</h4>
+          {ingresos.map((l) => <Linea key={l.id} l={l} editable={false} onDel={() => {}} />)}
+        </div>
+        <div>
+          <h4 className="text-sm font-semibold text-red-600 mb-1">Descuentos</h4>
+          {descuentos.map((l) => <Linea key={l.id} l={l} editable={false} onDel={() => {}} />)}
+        </div>
+      </div>
+    </Card>
   );
 }
 

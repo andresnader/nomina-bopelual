@@ -3,7 +3,7 @@ import pool from '../db/pool.js';
 import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.js';
 
 import { recalcularTotales } from '../services/roles.js';
-import { aplicarPrestamosPendientes, aplicarDescuentosPendientes, aplicarSueldoPendiente } from '../services/periodos.js';
+import { aplicarPrestamosPendientes, aplicarDescuentosPendientes, aplicarSueldoPendiente, buscarQuincena1 } from '../services/periodos.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,17 +19,51 @@ router.get(
   async (req, res) => {
     const { rows } = await pool.query(
       `SELECT rp.*, c.nombre AS colaborador_nombre, c.cedula, c.cargo,
-              p.nombre AS periodo_nombre, p.estado AS periodo_estado
+              p.nombre AS periodo_nombre, p.estado AS periodo_estado,
+              p.quincena AS periodo_quincena, p.fecha_inicio AS periodo_fecha_inicio,
+              p.mes_periodo_id AS periodo_mes_id
        FROM roles_pago rp JOIN colaboradores c ON c.id=rp.colaborador_id
        JOIN periodos p ON p.id=rp.periodo_id WHERE rp.id=$1`,
       [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'no encontrado' });
+    const rol = rows[0];
     const { rows: lineas } = await pool.query(
       'SELECT * FROM lineas_rol WHERE rol_pago_id=$1 ORDER BY clase, creado_en',
       [req.params.id]
     );
-    res.json({ ...rows[0], lineas });
+
+    // Referencia de solo lectura para quien está viendo/editando la 2da
+    // quincena: qué se pagó y descontó en la 1ra, sin tener que ir a buscarla
+    // manualmente (motivo del bug de sincronización del anticipo de Jhonas).
+    let quincenaAnterior;
+    if (rol.periodo_quincena === '2') {
+      const periodoQ1 = await buscarQuincena1(
+        pool,
+        { mes_periodo_id: rol.periodo_mes_id, fecha_inicio: rol.periodo_fecha_inicio },
+        rol.colaborador_id
+      );
+      if (periodoQ1) {
+        const { rows: rolQ1Rows } = await pool.query(
+          'SELECT id, neto FROM roles_pago WHERE periodo_id=$1 AND colaborador_id=$2',
+          [periodoQ1.id, rol.colaborador_id]
+        );
+        if (rolQ1Rows.length > 0) {
+          const { rows: lineasQ1 } = await pool.query(
+            'SELECT * FROM lineas_rol WHERE rol_pago_id=$1 ORDER BY clase, creado_en',
+            [rolQ1Rows[0].id]
+          );
+          quincenaAnterior = {
+            periodo_nombre: periodoQ1.nombre,
+            periodo_estado: periodoQ1.estado,
+            neto: rolQ1Rows[0].neto,
+            lineas: lineasQ1,
+          };
+        }
+      }
+    }
+
+    res.json({ ...rol, lineas, ...(quincenaAnterior ? { quincenaAnterior } : {}) });
   }
 );
 
