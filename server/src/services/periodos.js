@@ -22,6 +22,31 @@ function salidaEntraAlCierre(fechaSalida, fechaFin) {
   return dias <= DIAS_VENTANA_CIERRE - 1;
 }
 
+// Encuentra la quincena 1 hermana de una quincena 2: primero por el período
+// MES padre (mes_periodo_id); si el mes no tiene padre (datos anteriores a
+// esa migración), busca la quincena 1 más cercana justo antes DONDE ESTE
+// COLABORADOR tenga un rol_pago — sin el filtro por colaborador, en una BD
+// compartida (como la de test) podría encontrar la quincena 1 de otra
+// persona que por coincidencia cae en el rango de fechas.
+export async function buscarQuincena1(client, periodoQ2, colaboradorId) {
+  if (periodoQ2.mes_periodo_id) {
+    const { rows } = await client.query(
+      `SELECT * FROM periodos WHERE mes_periodo_id=$1 AND quincena='1'`,
+      [periodoQ2.mes_periodo_id]
+    );
+    return rows[0] ?? null;
+  }
+  const { rows } = await client.query(
+    `SELECT p.* FROM periodos p
+     JOIN roles_pago rp ON rp.periodo_id = p.id
+     WHERE p.quincena='1' AND rp.colaborador_id=$2
+       AND p.fecha_fin < $1 AND p.fecha_fin >= ($1::date - interval '20 days')
+     ORDER BY p.fecha_fin DESC LIMIT 1`,
+    [periodoQ2.fecha_inicio, colaboradorId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function crearPeriodo(client, p) {
   const { rows } = await client.query(
     `INSERT INTO periodos (nombre, fecha_inicio, fecha_fin, quincena, creado_por, empresa)
