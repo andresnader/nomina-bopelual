@@ -60,6 +60,23 @@ function GeneralTab() {
   );
 }
 
+function EncabezadoFila({ empresa, onGuardar }) {
+  const [direccion, setDireccion] = useState(empresa.direccion ?? '');
+  const [telefonos, setTelefonos] = useState(empresa.telefonos ?? '');
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onGuardar(empresa.empresa, { direccion, telefonos }); }}
+      className="grid gap-2 mt-2">
+      <label className="text-sm text-slate-600">Dirección
+        <input value={direccion} onChange={(e) => setDireccion(e.target.value)} className="input w-full mt-1" />
+      </label>
+      <label className="text-sm text-slate-600">Teléfonos
+        <input value={telefonos} onChange={(e) => setTelefonos(e.target.value)} className="input w-full mt-1" />
+      </label>
+      <button className="btn btn-primary !px-3 !py-1.5 text-xs justify-self-start">Guardar encabezado</button>
+    </form>
+  );
+}
+
 function EmpresasTab() {
   const [empresas, setEmpresas] = useState([]);
   const toast = useToast();
@@ -77,20 +94,34 @@ function EmpresasTab() {
     }
   };
 
+  const guardarEncabezado = async (empresa, { direccion, telefonos }) => {
+    try {
+      await api.patch(`/empresas/${encodeURIComponent(empresa)}`, { direccion, telefonos });
+      toast.success('Encabezado actualizado.');
+      cargar();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   return (
     <Card>
       <h2 className="font-display font-bold mb-1">Retención de fuente por empresa</h2>
       <p className="text-sm text-muted mb-4">
-        Define si las facturas de proveedores de cada empresa aplican el 10% de retención de fuente automáticamente.
+        Define si las facturas de proveedores de cada empresa aplican el 10% de retención de fuente automáticamente,
+        y la dirección/teléfonos que aparecen en el encabezado del Rol de Pagos Individual.
       </p>
       <div className="grid gap-2 max-w-lg">
         {empresas.map((e) => (
-          <div key={e.empresa} className="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3">
-            <span className="text-sm font-medium text-slate-700">{e.empresa}</span>
-            <button onClick={() => alternar(e)}
-              className={e.aplica_retencion ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
-              {e.aplica_retencion ? 'RETIENE 10%' : 'NO RETIENE'}
-            </button>
+          <div key={e.empresa} className="border border-slate-200 rounded-lg px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-700">{e.empresa}</span>
+              <button onClick={() => alternar(e)}
+                className={e.aplica_retencion ? 'badge bg-emerald-100 text-emerald-700' : 'badge bg-slate-100 text-slate-600'}>
+                {e.aplica_retencion ? 'RETIENE 10%' : 'NO RETIENE'}
+              </button>
+            </div>
+            <EncabezadoFila empresa={e} onGuardar={guardarEncabezado} />
           </div>
         ))}
         {empresas.length === 0 && <p className="text-sm text-slate-500">Sin empresas configuradas.</p>}

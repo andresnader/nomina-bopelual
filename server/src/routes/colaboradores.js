@@ -4,6 +4,8 @@ import { requireAuth, requireRole, requireSelfOrRole } from '../auth/middleware.
 import { esTipoContratoValido } from '../lib/tipos-contrato.js';
 import { agregarColaboradorAPeriodosBorrador, reconciliarColaboradorEnPeriodosBorrador } from '../services/periodos.js';
 import { crearVinculo, listarVinculos, editarVinculo, borrarVinculo, sincronizarFechasDerivadas } from '../services/empleo.js';
+import { armarRolIndividual } from '../services/rol-individual.js';
+import { generarRolIndividualExcel } from '../lib/rol-individual-excel.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -134,7 +136,7 @@ router.get(
     const [contratos, rolesPago, prestamos, emisiones] = await Promise.all([
       pool.query('SELECT * FROM contratos WHERE colaborador_id=$1 ORDER BY fecha_inicio DESC', [req.params.id]),
       pool.query(
-        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha, p.estado AS periodo_estado
+        `SELECT rp.*, p.nombre AS periodo_nombre, p.fecha_fin AS periodo_fecha, p.estado AS periodo_estado, p.quincena AS periodo_quincena
          FROM roles_pago rp JOIN periodos p ON p.id=rp.periodo_id
          WHERE rp.colaborador_id=$1 ORDER BY p.fecha_inicio DESC`,
         [req.params.id]
@@ -202,7 +204,7 @@ router.patch('/:id', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
     'banco', 'codigo_banco', 'tipo_cuenta', 'cuenta_bancaria', 'pct_anticipo',
     'fecha_nacimiento', 'sexo', 'estado_civil', 'direccion', 'horario',
     'acumular_decimos', 'acumular_fondos_reserva', 'extension_conyugal',
-    'iess_tasa_personal_especial'
+    'iess_tasa_personal_especial', 'provincia', 'ciudad'
   ];
   if ('nombre' in req.body && req.body.nombre) req.body.nombre = req.body.nombre.toUpperCase();
   // `tipo` decide el porcentaje de la quincena, si se prorratea y si le tocan
@@ -446,6 +448,23 @@ router.delete('/:colaboradorId/rubros-ingreso/:rubroId', requireRole(['ADMIN', '
   );
   if (rowCount === 0) return res.status(404).json({ error: 'no encontrado' });
   res.json({ ok: true });
+});
+
+router.get('/:id/rol-individual-excel', requireRole(['ADMIN', 'RRHH']), async (req, res) => {
+  const { periodo_id } = req.query;
+  if (!periodo_id) return res.status(400).json({ error: 'periodo_id requerido' });
+  try {
+    const datos = await armarRolIndividual(pool, { colaboradorId: req.params.id, periodoQ2Id: periodo_id });
+    const buffer = generarRolIndividualExcel(datos);
+    const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    res.json({
+      archivo: `rol-individual_${slug(datos.colaborador.nombre)}_${datos.periodo.hasta}.xlsx`,
+      contenidoBase64: buffer.toString('base64'),
+    });
+  } catch (e) {
+    const noEncontrado = e.message.includes('no encontrado');
+    res.status(noEncontrado ? 404 : 400).json({ error: e.message });
+  }
 });
 
 export default router;

@@ -46,4 +46,22 @@ describe('config_empresas', () => {
       request(app).patch(`/api/empresas/${encodeURIComponent('CARROS-YA S.A.')}`)
     ).send({ aplica_retencion: false }); // restaurar
   });
+
+  it('permite editar direccion y telefonos sin afectar aplica_retencion existente', async () => {
+    const app = createApp();
+    const nombre = `EMPRESA TEST ${Date.now()}`;
+    await auth(request(app).patch(`/api/empresas/${encodeURIComponent(nombre)}`)).send({ aplica_retencion: true });
+
+    const editada = await auth(request(app).patch(`/api/empresas/${encodeURIComponent(nombre)}`)).send({
+      direccion: 'TARQUI / AVDA. JUAN TANCA MARENGO S/N Y AVDA. AGUSTIN FREIRE',
+      telefonos: '0985955720 - 0959782846 - 0991014153'
+    });
+    expect(editada.status).toBe(200);
+    expect(editada.body.direccion).toBe('TARQUI / AVDA. JUAN TANCA MARENGO S/N Y AVDA. AGUSTIN FREIRE');
+    expect(editada.body.telefonos).toBe('0985955720 - 0959782846 - 0991014153');
+    // No se perdió aplica_retencion=true del paso anterior (bug a evitar: el
+    // PATCH original sobrescribía aplica_retencion con !!undefined=false
+    // cada vez que se enviaba cualquier otro campo).
+    expect(editada.body.aplica_retencion).toBe(true);
+  });
 });
